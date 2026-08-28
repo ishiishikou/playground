@@ -15,20 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Render mobile preview in headless Chrome
+      - name: Render both WebGL2 studies in headless Chrome
         run: |
           python3 -m http.server 8000 >/tmp/particle-http.log 2>&1 &
           sleep 1
-          google-chrome --headless --no-sandbox --disable-dev-shm-usage \
-            --window-size=430,932 \
-            --virtual-time-budget=4200 \
-            --screenshot=preview.png \
-            http://127.0.0.1:8000/index.html
-          test -s preview.png
-      - name: Commit preview
+          FLAGS="--headless --no-sandbox --disable-dev-shm-usage --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader-webgl --window-size=430,932"
+          google-chrome $FLAGS --virtual-time-budget=1000 \
+            --screenshot=preview-rise.png \
+            'http://127.0.0.1:8000/index.html?mode=rise&preview=1'
+          google-chrome $FLAGS --virtual-time-budget=1000 \
+            --screenshot=preview-glyph.png \
+            'http://127.0.0.1:8000/index.html?mode=glyph&preview=1'
+          test -s preview-rise.png
+          test -s preview-glyph.png
+      - name: Commit previews
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add preview.png
-          git diff --cached --quiet || git commit -m "Update rendered preview"
+          git add preview-rise.png preview-glyph.png
+          git diff --cached --quiet || git commit -m "Update WebGL2 rendered previews"
           git push
