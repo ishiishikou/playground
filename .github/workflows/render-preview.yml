@@ -20,29 +20,35 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq fonts-noto-cjk >/dev/null
           fc-cache -f
-      - name: Render both WebGL2 studies in headless Chrome
+      - name: Render every deterministic study state
         run: |
           python3 -m http.server 8000 >/tmp/particle-http.log 2>&1 &
           sleep 1
           FLAGS="--headless --no-sandbox --disable-dev-shm-usage --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader-webgl --window-size=430,932"
           render() {
             file="$1"; url="$2"
-            google-chrome $FLAGS --virtual-time-budget=1000 --screenshot="$file" "$url"
+            google-chrome $FLAGS --virtual-time-budget=900 --screenshot="$file" "$url"
             test -s "$file"
           }
-          render preview-rise-start.png 'http://127.0.0.1:8000/index.html?mode=rise&preview=1&phase=0.03'
-          render preview-rise.png       'http://127.0.0.1:8000/index.html?mode=rise&preview=1&phase=0.50'
-          render preview-rise-end.png   'http://127.0.0.1:8000/index.html?mode=rise&preview=1&phase=0.90'
-          render preview-glyph-start.png 'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&phase=0.03'
-          render preview-glyph.png       'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&phase=0.50'
-          render preview-glyph-end.png   'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&phase=0.90'
+          render preview-rise-start.png 'http://127.0.0.1:8000/index.html?mode=rise&preview=1&item=0&phase=0.03'
+          render preview-rise-0.png     'http://127.0.0.1:8000/index.html?mode=rise&preview=1&item=0&phase=0.50'
+          render preview-rise-1.png     'http://127.0.0.1:8000/index.html?mode=rise&preview=1&item=1&phase=0.50'
+          render preview-rise-2.png     'http://127.0.0.1:8000/index.html?mode=rise&preview=1&item=2&phase=0.50'
+          render preview-rise-end.png   'http://127.0.0.1:8000/index.html?mode=rise&preview=1&item=2&phase=0.90'
+          render preview-glyph-0.png    'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&item=0&phase=0.50'
+          render preview-glyph-1.png    'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&item=1&phase=0.50'
+          render preview-glyph-2.png    'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&item=2&phase=0.50'
+          render preview-glyph-3.png    'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&item=3&phase=0.50'
+          render preview-glyph-side.png 'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&item=2&phase=0.86'
+          cp preview-rise-0.png preview-rise.png
+          cp preview-glyph-0.png preview-glyph.png
       - name: Upload previews
         uses: actions/upload-artifact@v4
         with:
           name: rendered-previews
           path: preview-*.png
           retention-days: 1
-      - name: Commit peak previews
+      - name: Commit representative previews
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
