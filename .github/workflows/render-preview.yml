@@ -15,15 +15,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Japanese fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk >/dev/null
+          fc-cache -f
       - name: Render both WebGL2 studies in headless Chrome
         run: |
           python3 -m http.server 8000 >/tmp/particle-http.log 2>&1 &
           sleep 1
           FLAGS="--headless --no-sandbox --disable-dev-shm-usage --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader-webgl --window-size=430,932"
-          google-chrome $FLAGS --virtual-time-budget=1000 \
+          google-chrome $FLAGS --virtual-time-budget=1200 \
             --screenshot=preview-rise.png \
             'http://127.0.0.1:8000/index.html?mode=rise&preview=1'
-          google-chrome $FLAGS --virtual-time-budget=1000 \
+          google-chrome $FLAGS --virtual-time-budget=1200 \
             --screenshot=preview-glyph.png \
             'http://127.0.0.1:8000/index.html?mode=glyph&preview=1'
           test -s preview-rise.png
