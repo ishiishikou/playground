@@ -28,6 +28,14 @@ jobs:
             'http://127.0.0.1:8000/index.html?mode=glyph&preview=1'
           test -s preview-rise.png
           test -s preview-glyph.png
+      - name: Upload previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-previews
+          path: |
+            preview-rise.png
+            preview-glyph.png
+          retention-days: 1
       - name: Commit previews
         run: |
           git config user.name "github-actions[bot]"
