@@ -1,442 +1,109 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>Particle Type Lab</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05080d">
+<title>GPU Particle Type — Two Studies</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #02050a; }
-  body { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  .hud { position: fixed; inset: 0; pointer-events: none; padding: max(22px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); display: flex; flex-direction: column; justify-content: space-between; }
-  .brand { display: flex; align-items: center; gap: 10px; letter-spacing: .14em; font-size: 11px; font-weight: 700; color: rgba(225,239,255,.74); text-transform: uppercase; }
-  .dot { width: 6px; height: 6px; border-radius: 999px; background: #9ed4ff; box-shadow: 0 0 18px #69baff; }
-  .topline { display: flex; justify-content: space-between; align-items: flex-start; }
-  .counter { font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(225,239,255,.42); }
-  .footer { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
-  .copy { max-width: 420px; }
-  .copy strong { display: block; font: 700 clamp(20px, 5.4vw, 34px)/1.05 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -.04em; color: rgba(238,247,255,.92); margin-bottom: 8px; }
-  .copy span { font-size: 11px; line-height: 1.5; color: rgba(225,239,255,.42); }
-  .chips { display: flex; gap: 7px; pointer-events: auto; }
-  .chip { border: 1px solid rgba(173,216,255,.14); background: rgba(7,17,29,.48); color: rgba(229,242,255,.68); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; font-weight: 700; cursor: pointer; transition: .2s ease; }
-  .chip.active { border-color: rgba(160,215,255,.45); background: rgba(103,180,255,.16); color: #f3f9ff; box-shadow: 0 0 28px rgba(85,171,255,.12); }
-  @media (max-width: 620px) { .footer { align-items: flex-end; } .copy span { display: none; } .chips { gap: 5px; } .chip { width: 32px; height: 32px; font-size: 13px; } }
+  *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05080d;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .ui{position:fixed;inset:0;pointer-events:none;padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;justify-content:space-between;color:white}
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.brand{font:700 10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;opacity:.6}.status{font:600 10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.42;text-align:right}
+  .bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}.caption strong{display:block;font-size:clamp(24px,7vw,52px);line-height:.92;letter-spacing:-.055em}.caption small{display:block;margin-top:8px;font-size:10px;letter-spacing:.08em;opacity:.5}
+  .switch{pointer-events:auto;display:flex;gap:6px;padding:5px;border-radius:999px;background:rgba(12,17,25,.44);border:1px solid rgba(255,255,255,.11);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  .switch button{border:0;border-radius:999px;padding:10px 12px;background:transparent;color:rgba(255,255,255,.52);font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;cursor:pointer}.switch button.active{background:rgba(255,255,255,.13);color:white}
+  .hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font:600 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:white;opacity:0;pointer-events:none;transition:opacity .25s}.hint.show{opacity:.75}
+  body.light .ui{color:#111827}.light .switch{background:rgba(255,255,255,.6);border-color:rgba(20,30,50,.12)}.light .switch button{color:rgba(20,30,50,.5)}.light .switch button.active{background:rgba(20,30,50,.09);color:#111827}
+  @media(max-width:640px){.caption small{display:none}.bottom{align-items:flex-end}.switch button{padding:9px 10px}.brand{max-width:150px}}
 </style>
 </head>
 <body>
-<canvas id="stage" aria-label="3D particle text animation"></canvas>
-<div class="hud" aria-hidden="true">
-  <div class="topline">
-    <div class="brand"><i class="dot"></i> Particle Type Lab</div>
-    <div class="counter" id="counter">01 / 04</div>
-  </div>
-  <div class="footer">
-    <div class="copy">
-      <strong id="label">光 / LIGHT</strong>
-      <span>Text mask → distance field → beveled particle volume. Tap the canvas to advance.</span>
-    </div>
-    <div class="chips" id="chips"></div>
-  </div>
+<canvas id="gl"></canvas>
+<div class="ui" aria-hidden="true">
+  <div class="top"><div class="brand">GPU PARTICLE TYPE<br>WEBGL2 / 2 STUDIES</div><div class="status" id="status">55K PARTICLES<br>POST BLOOM</div></div>
+  <div class="bottom"><div class="caption"><strong id="title">RISE / TYPE</strong><small id="sub">FLOOR → SENTENCE → FLOOR</small></div><div class="switch"><button id="rise" class="active">01 RISE</button><button id="glyph">02 GLYPH</button></div></div>
 </div>
+<div class="hint" id="hint">WebGL2 is required.</div>
 <script>
 (() => {
-  'use strict';
+'use strict';
+const canvas=document.getElementById('gl'), title=document.getElementById('title'), sub=document.getElementById('sub'), status=document.getElementById('status'), hint=document.getElementById('hint');
+const gl=canvas.getContext('webgl2',{antialias:false,alpha:false,premultipliedAlpha:false,preserveDrawingBuffer:false});
+if(!gl){hint.classList.add('show');return;}
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let W=0,H=0,DPR=1,N=0,mode=0,t0=performance.now(),charIndex=0,lastChar=-1,dragX=0,dragY=0,targetDragX=0,targetDragY=0,down=false,px=0,py=0;
+const chars=['光','粒','子','漢','字'];
+const params=new URLSearchParams(location.search); const preview=params.get('preview')==='1'; if(params.get('mode')==='glyph') mode=1;
 
-  const canvas = document.getElementById('stage');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  const counter = document.getElementById('counter');
-  const label = document.getElementById('label');
-  const chips = document.getElementById('chips');
-
-  const GLYPHS = [
-    { char: '光', label: '光 / LIGHT' },
-    { char: '立', label: '立 / FORM' },
-    { char: '体', label: '体 / VOLUME' },
-    { char: '字', label: '字 / TYPE' }
-  ];
-
-  const TAU = Math.PI * 2;
-  const MASK = 256;
-  const INF = 1e20;
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  let W = 0, H = 0, DPR = 1;
-  let particleCount = 4400;
-  let particles = [];
-  let targets = [];
-  let glyphIndex = 0;
-  let cycleStart = performance.now();
-  let last = performance.now();
-  let pointerX = 0, pointerY = 0, pointerTargetX = 0, pointerTargetY = 0;
-  let dragging = false, dragStartX = 0, dragStartY = 0, pointerDownX = 0, pointerDownY = 0;
-  let manualYaw = 0, manualPitch = 0;
-  let resizeTimer = 0;
-
-  let seed = 0x7f4a7c15;
-  function rnd() {
-    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
-    return ((seed >>> 0) / 4294967296);
-  }
-
-  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-  function mix(a, b, t) { return a + (b - a) * t; }
-  function smoothstep(a, b, x) {
-    const t = clamp((x - a) / (b - a), 0, 1);
-    return t * t * (3 - 2 * t);
-  }
-
-  function fitCanvas() {
-    W = innerWidth;
-    H = innerHeight;
-    DPR = Math.min(devicePixelRatio || 1, 1.6);
-    canvas.width = Math.floor(W * DPR);
-    canvas.height = Math.floor(H * DPR);
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    particleCount = reducedMotion ? 1800 : (Math.min(W, H) < 520 ? 3600 : 5200);
-    buildScene();
-  }
-
-  // Felzenszwalb/Huttenlocher 1-D squared Euclidean distance transform.
-  // Applied row/column-wise below to convert each rasterized glyph into a distance field.
-  function edt1d(f, n, out) {
-    const v = new Int32Array(n);
-    const z = new Float64Array(n + 1);
-    let k = 0;
-    v[0] = 0;
-    z[0] = -Infinity;
-    z[1] = Infinity;
-    for (let q = 1; q < n; q++) {
-      let s;
-      do {
-        const vk = v[k];
-        s = ((f[q] + q*q) - (f[vk] + vk*vk)) / (2*q - 2*vk);
-        if (s <= z[k]) k--;
-      } while (k >= 0 && s <= z[k]);
-      k++;
-      v[k] = q;
-      z[k] = s;
-      z[k + 1] = Infinity;
-    }
-    k = 0;
-    for (let q = 0; q < n; q++) {
-      while (z[k + 1] < q) k++;
-      const dx = q - v[k];
-      out[q] = dx*dx + f[v[k]];
-    }
-  }
-
-  function distanceField(mask) {
-    const temp = new Float64Array(MASK * MASK);
-    const dist = new Float64Array(MASK * MASK);
-    const f = new Float64Array(MASK);
-    const out = new Float64Array(MASK);
-
-    for (let x = 0; x < MASK; x++) {
-      for (let y = 0; y < MASK; y++) f[y] = mask[y*MASK + x] ? INF : 0;
-      edt1d(f, MASK, out);
-      for (let y = 0; y < MASK; y++) temp[y*MASK + x] = out[y];
-    }
-    for (let y = 0; y < MASK; y++) {
-      for (let x = 0; x < MASK; x++) f[x] = temp[y*MASK + x];
-      edt1d(f, MASK, out);
-      for (let x = 0; x < MASK; x++) dist[y*MASK + x] = Math.sqrt(out[x]);
-    }
-    return dist;
-  }
-
-  function rasterizeGlyph(char) {
-    const off = document.createElement('canvas');
-    off.width = off.height = MASK;
-    const g = off.getContext('2d', { willReadFrequently: true });
-    g.clearRect(0, 0, MASK, MASK);
-    g.fillStyle = '#fff';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.font = '900 210px "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif';
-    g.fillText(char, MASK/2, MASK/2 + 5);
-    const data = g.getImageData(0, 0, MASK, MASK).data;
-    const mask = new Uint8Array(MASK * MASK);
-    for (let i = 0, p = 0; i < data.length; i += 4, p++) mask[p] = data[i+3] > 80 ? 1 : 0;
-    const dist = distanceField(mask);
-    const pixels = [];
-    for (let y = 2; y < MASK-2; y += 2) {
-      for (let x = 2; x < MASK-2; x += 2) {
-        const i = y*MASK + x;
-        if (mask[i]) pixels.push({ x, y, d: dist[i] });
-      }
-    }
-    return pixels;
-  }
-
-  function buildTargets() {
-    seed = 0x7f4a7c15;
-    const display = Math.min(W * 0.72, H * 0.54);
-    const s = display / 214;
-    targets = GLYPHS.map((g) => {
-      const pts = rasterizeGlyph(g.char);
-      for (let i = pts.length - 1; i > 0; i--) {
-        const j = Math.floor(rnd() * (i + 1));
-        [pts[i], pts[j]] = [pts[j], pts[i]];
-      }
-      const arr = new Array(particleCount);
-      for (let i = 0; i < particleCount; i++) {
-        const p = pts[i % pts.length];
-        const edge = clamp(p.d / 11, 0, 1);
-        const halfDepth = s * mix(4, 28, smoothstep(0, 1, edge));
-        const surface = rnd();
-        let z;
-        if (surface < .34) z = (rnd() < .5 ? -1 : 1) * halfDepth;
-        else z = (rnd()*2 - 1) * halfDepth;
-        arr[i] = {
-          x: (p.x - MASK/2 + (rnd()-.5)*1.2) * s,
-          y: (p.y - MASK/2 + (rnd()-.5)*1.2) * s,
-          z,
-          edge,
-          phase: rnd(),
-          twinkle: rnd()*TAU,
-          size: mix(.55, 1.75, rnd()) * clamp(s, .8, 1.5)
-        };
-      }
-      return arr;
-    });
-  }
-
-  function buildParticles() {
-    particles = new Array(particleCount);
-    const floorY = H * .34;
-    const spread = Math.max(W, H) * .9;
-    for (let i = 0; i < particleCount; i++) {
-      const a = rnd() * TAU;
-      const r = Math.pow(rnd(), .58) * spread;
-      const scatterX = Math.cos(a) * r;
-      const scatterY = floorY + Math.pow(rnd(), 2.2) * H * .12;
-      const scatterZ = (rnd() - .5) * Math.max(W, H) * 1.1;
-      particles[i] = {
-        x: scatterX,
-        y: scatterY,
-        z: scatterZ,
-        vx: 0, vy: 0, vz: 0,
-        sx: scatterX, sy: scatterY, sz: scatterZ,
-        noise: rnd()*TAU
-      };
-    }
-  }
-
-  function buildScene() {
-    buildTargets();
-    buildParticles();
-    cycleStart = performance.now() - 700;
-  }
-
-  function buildUI() {
-    chips.innerHTML = '';
-    GLYPHS.forEach((g, i) => {
-      const b = document.createElement('button');
-      b.className = 'chip' + (i === glyphIndex ? ' active' : '');
-      b.textContent = g.char;
-      b.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        selectGlyph(i);
-      });
-      chips.appendChild(b);
-    });
-    updateUI();
-  }
-
-  function updateUI() {
-    counter.textContent = String(glyphIndex + 1).padStart(2, '0') + ' / ' + String(GLYPHS.length).padStart(2, '0');
-    label.textContent = GLYPHS[glyphIndex].label;
-    [...chips.children].forEach((el, i) => el.classList.toggle('active', i === glyphIndex));
-  }
-
-  function selectGlyph(i) {
-    glyphIndex = (i + GLYPHS.length) % GLYPHS.length;
-    cycleStart = performance.now() - 220;
-    for (let n = 0; n < particles.length; n++) {
-      const p = particles[n];
-      const len = Math.hypot(p.x, p.y) + 1;
-      p.vx += p.x / len * (1.5 + rnd()*2.5);
-      p.vy += p.y / len * (1.2 + rnd()*1.7);
-      p.vz += (rnd()-.5)*4;
-    }
-    updateUI();
-  }
-
-  function update(dt, now) {
-    pointerX += (pointerTargetX - pointerX) * .055;
-    pointerY += (pointerTargetY - pointerY) * .055;
-
-    const duration = reducedMotion ? 8000 : 5600;
-    let phase = (now - cycleStart) / duration;
-    if (phase >= 1) {
-      glyphIndex = (glyphIndex + 1) % GLYPHS.length;
-      cycleStart += duration;
-      phase %= 1;
-      updateUI();
-    }
-
-    const target = targets[glyphIndex];
-    const time = now * .001;
-    const exit = smoothstep(.82, .98, phase);
-
-    for (let i = 0; i < particleCount; i++) {
-      const p = particles[i];
-      const t = target[i];
-      const delay = t.phase * .16;
-      const entry = smoothstep(.04 + delay, .36 + delay, phase);
-      const leave = smoothstep(.82 + delay*.15, .985, phase);
-      const blend = entry * (1 - leave);
-
-      const lift = Math.sin(clamp((phase - delay) * Math.PI * 1.25, 0, Math.PI)) * (1-entry) * H*.08;
-      const swirl = exit * (1-exit) * 220;
-      const sx = p.sx + Math.cos(p.noise + time*1.8) * swirl;
-      const sy = p.sy - lift + Math.sin(p.noise*1.7 + time*1.4) * swirl*.12;
-      const sz = p.sz + Math.sin(p.noise + time*1.3) * swirl;
-
-      const tx = mix(sx, t.x, blend);
-      const ty = mix(sy, t.y, blend);
-      const tz = mix(sz, t.z, blend);
-      const spring = mix(.018, .11, blend) * Math.min(dt*60, 1.8);
-
-      p.vx += (tx - p.x) * spring * .14;
-      p.vy += (ty - p.y) * spring * .14;
-      p.vz += (tz - p.z) * spring * .14;
-      p.vx *= .84; p.vy *= .84; p.vz *= .84;
-      p.x += p.vx; p.y += p.vy; p.z += p.vz;
-    }
-  }
-
-  function render(now) {
-    const bg = ctx.createRadialGradient(W*.5, H*.46, 0, W*.5, H*.46, Math.max(W,H)*.8);
-    bg.addColorStop(0, '#07111d');
-    bg.addColorStop(.45, '#030912');
-    bg.addColorStop(1, '#010307');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    const t = now*.001;
-    const yaw = manualYaw + pointerX*.20 + Math.sin(t*.38)*.15;
-    const pitch = manualPitch + pointerY*.10 + Math.sin(t*.27)*.035;
-    const cy = Math.cos(yaw), sy = Math.sin(yaw);
-    const cx = Math.cos(pitch), sx = Math.sin(pitch);
-    const camera = Math.max(620, Math.min(W,H)*1.35);
-    const centerX = W*.5;
-    const centerY = H*.47;
-
-    const floorY = centerY + H*.34;
-    const fog = ctx.createLinearGradient(0, floorY-H*.11, 0, H);
-    fog.addColorStop(0, 'rgba(50,116,170,0)');
-    fog.addColorStop(.55, 'rgba(50,116,170,.045)');
-    fog.addColorStop(1, 'rgba(27,73,112,.11)');
-    ctx.fillStyle = fog;
-    ctx.fillRect(0, floorY-H*.11, W, H-(floorY-H*.11));
-
-    const projected = new Array(particleCount);
-    const target = targets[glyphIndex];
-    for (let i = 0; i < particleCount; i++) {
-      const p = particles[i];
-      const x1 = p.x*cy - p.z*sy;
-      const z1 = p.x*sy + p.z*cy;
-      const y1 = p.y*cx - z1*sx;
-      const z2 = p.y*sx + z1*cx;
-      const scale = camera / Math.max(150, camera - z2);
-      projected[i] = {
-        i,
-        x: centerX + x1*scale,
-        y: centerY + y1*scale,
-        z: z2,
-        scale,
-        edge: target[i].edge,
-        twinkle: target[i].twinkle,
-        size: target[i].size
-      };
-    }
-    projected.sort((a,b) => a.z - b.z);
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (let n = 0; n < projected.length; n++) {
-      const q = projected[n];
-      if (q.x < -12 || q.x > W+12 || q.y < -12 || q.y > H+12) continue;
-      const depth = clamp((q.z + 220) / 520, 0, 1);
-      const shimmer = .78 + Math.sin(t*3.2 + q.twinkle)*.22;
-      const alpha = clamp((.22 + depth*.62) * shimmer, .08, .9);
-      const radius = clamp(q.size * q.scale, .45, 3.3);
-      const edgeBoost = .70 + q.edge*.30;
-
-      if ((q.i & 7) === 0 && radius > .65) {
-        ctx.fillStyle = `rgba(57,151,255,${alpha*.10})`;
-        ctx.beginPath(); ctx.arc(q.x, q.y, radius*4.1, 0, TAU); ctx.fill();
-      }
-      const b = Math.floor(210 + 45*edgeBoost);
-      const g = Math.floor(220 + 30*edgeBoost);
-      ctx.fillStyle = `rgba(${Math.floor(115+95*edgeBoost)},${g},${b},${alpha})`;
-      ctx.beginPath(); ctx.arc(q.x, q.y, radius, 0, TAU); ctx.fill();
-      if (radius > 1.25 && (q.i % 5 === 0)) {
-        ctx.fillStyle = `rgba(245,251,255,${alpha*.72})`;
-        ctx.beginPath(); ctx.arc(q.x-radius*.18, q.y-radius*.18, radius*.28, 0, TAU); ctx.fill();
-      }
-    }
-    ctx.restore();
-
-    ctx.strokeStyle = 'rgba(142,207,255,.055)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(W*.12, floorY);
-    ctx.lineTo(W*.88, floorY);
-    ctx.stroke();
-  }
-
-  function frame(now) {
-    const dt = Math.min((now - last) / 1000, .033);
-    last = now;
-    update(dt, now);
-    render(now);
-    requestAnimationFrame(frame);
-  }
-
-  canvas.addEventListener('pointerdown', (e) => {
-    dragging = true;
-    dragStartX = pointerDownX = e.clientX;
-    dragStartY = pointerDownY = e.clientY;
-    canvas.setPointerCapture?.(e.pointerId);
-  });
-  canvas.addEventListener('pointermove', (e) => {
-    const nx = (e.clientX / Math.max(1,W) - .5) * 2;
-    const ny = (e.clientY / Math.max(1,H) - .5) * 2;
-    pointerTargetX = nx;
-    pointerTargetY = ny;
-    if (dragging) {
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-      manualYaw += dx * .004;
-      manualPitch = clamp(manualPitch + dy * .0025, -.42, .42);
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-    }
-  });
-  canvas.addEventListener('pointerup', (e) => {
-    const moved = Math.hypot(e.clientX-pointerDownX, e.clientY-pointerDownY);
-    dragging = false;
-    if (moved < 9) selectGlyph(glyphIndex + 1);
-  });
-  canvas.addEventListener('pointercancel', () => dragging = false);
-  canvas.addEventListener('pointerleave', () => { if (!dragging) { pointerTargetX = 0; pointerTargetY = 0; } });
-
-  addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(fitCanvas, 120);
-  }, { passive: true });
-
-  buildUI();
-  Promise.resolve(document.fonts?.ready).finally(() => {
-    fitCanvas();
-    requestAnimationFrame(frame);
-  });
+const VERT=`#version 300 es
+precision highp float;
+layout(location=0) in vec3 aStart;
+layout(location=1) in vec3 aTarget;
+layout(location=2) in vec4 aMeta;
+uniform float uTime,uPhase,uAspect,uPointScale,uMode,uYaw,uPitch;
+out vec3 vColor; out float vAlpha; out float vSeed;
+float sat(float x){return clamp(x,0.0,1.0);} float sm(float a,float b,float x){float t=sat((x-a)/(b-a));return t*t*(3.0-2.0*t);} 
+mat3 rx(float a){float c=cos(a),s=sin(a);return mat3(1,0,0,0,c,-s,0,s,c);} mat3 ry(float a){float c=cos(a),s=sin(a);return mat3(c,0,s,0,1,0,-s,0,c);} 
+void main(){
+ float d=aMeta.x*.18; float enter=sm(.02+d,.34+d,uPhase); float leave=sm(.78+d*.18,.985,uPhase); float k=enter*(1.0-leave);
+ vec3 p=mix(aStart,aTarget,k);
+ float n=sin(aMeta.y*31.7+uTime*1.7)+sin(aMeta.z*17.1-uTime*1.2);
+ if(uMode<.5){
+   p.y += (1.0-enter)*abs(sin((uPhase+d)*3.14159))*0.08;
+   p.x += (1.0-k)*n*0.008;
+   p.z += (1.0-k)*sin(aMeta.w*19.0+uTime)*0.045;
+ }else{
+   p += vec3(sin(aMeta.y*50.0+uTime*.7),cos(aMeta.z*43.0-uTime*.5),sin(aMeta.w*37.0+uTime*.4))*0.006*(1.0-k);
+ }
+ p=ry(uYaw)*rx(uPitch)*p;
+ float z=1.72-p.z*.62; float persp=1.0/z; vec2 q=vec2(p.x/uAspect,p.y)*persp;
+ gl_Position=vec4(q,0.0,1.0);
+ float depth=clamp(1.25-p.z*.26,.65,1.55); gl_PointSize=clamp(uPointScale*aMeta.w*depth,1.0,9.5);
+ if(uMode<.5){vColor=mix(vec3(.18,.23,.29),vec3(.35,.46,.62),aMeta.z);vAlpha=mix(.26,.86,k);} else {vColor=mix(vec3(.17,.34,.48),vec3(.68,.82,.93),k*.75+aMeta.z*.2);vAlpha=mix(.10,.84,k);} vSeed=aMeta.y;
+}`;
+const FRAG=`#version 300 es
+precision highp float; in vec3 vColor; in float vAlpha; in float vSeed; out vec4 o;
+void main(){vec2 p=gl_PointCoord-.5;float r=length(p)*2.0;if(r>1.0)discard;float core=smoothstep(1.0,.08,r);float halo=exp(-r*r*3.7);float tw=.88+.12*sin(vSeed*62.0);float a=(core*.76+halo*.34)*vAlpha*tw;o=vec4(vColor*a,a);}`;
+const POSTV=`#version 300 es
+precision highp float; const vec2 P[3]=vec2[3](vec2(-1.,-1.),vec2(3.,-1.),vec2(-1.,3.)); out vec2 uv; void main(){gl_Position=vec4(P[gl_VertexID],0,1);uv=gl_Position.xy*.5+.5;}`;
+const POSTF=`#version 300 es
+precision highp float; in vec2 uv; out vec4 o; uniform sampler2D tScene; uniform vec2 uTexel; uniform float uMode;
+void main(){vec3 c=texture(tScene,uv).rgb;vec2 t=uTexel*2.4;vec3 b=c*.20;
+ b+=texture(tScene,uv+vec2(t.x,0)).rgb*.10;b+=texture(tScene,uv-vec2(t.x,0)).rgb*.10;b+=texture(tScene,uv+vec2(0,t.y)).rgb*.10;b+=texture(tScene,uv-vec2(0,t.y)).rgb*.10;
+ b+=texture(tScene,uv+vec2(t.x,t.y)).rgb*.065;b+=texture(tScene,uv+vec2(-t.x,t.y)).rgb*.065;b+=texture(tScene,uv+vec2(t.x,-t.y)).rgb*.065;b+=texture(tScene,uv-vec2(t.x,t.y)).rgb*.065;
+ b+=texture(tScene,uv+vec2(t.x*2.4,0)).rgb*.035;b+=texture(tScene,uv-vec2(t.x*2.4,0)).rgb*.035;b+=texture(tScene,uv+vec2(0,t.y*2.4)).rgb*.035;b+=texture(tScene,uv-vec2(0,t.y*2.4)).rgb*.035;
+ if(uMode<.5){vec3 bg=vec3(.963,.957,.936);o=vec4(bg-c*.95+b*.30,1);}else{vec3 bg=vec3(.008,.014,.023);o=vec4(bg+c+b*1.55,1);}}
+`;
+function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
+function program(v,f){const p=gl.createProgram();gl.attachShader(p,shader(gl.VERTEX_SHADER,v));gl.attachShader(p,shader(gl.FRAGMENT_SHADER,f));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));return p}
+const pp=program(VERT,FRAG), post=program(POSTV,POSTF); const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+const bStart=gl.createBuffer(),bTarget=gl.createBuffer(),bMeta=gl.createBuffer();
+function attrib(buf,loc,size){gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,0,0)}
+attrib(bStart,0,3);attrib(bTarget,1,3);attrib(bMeta,2,4);gl.bindVertexArray(null);
+let fbo=gl.createFramebuffer(),tex=gl.createTexture();
+function resizeFbo(){gl.bindTexture(gl.TEXTURE_2D,tex);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);gl.bindFramebuffer(gl.FRAMEBUFFER,null)}
+let seed=0x1234abcd;function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function edt(mask,w,h){const INF=9999, d=new Float32Array(w*h);for(let i=0;i<d.length;i++)d[i]=mask[i]?INF:0;for(let y=0;y<h;y++)for(let x=0;x<w;x++){let i=y*w+x,v=d[i];if(x)v=Math.min(v,d[i-1]+1);if(y)v=Math.min(v,d[i-w]+1);if(x&&y)v=Math.min(v,d[i-w-1]+1.414);d[i]=v}for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){let i=y*w+x,v=d[i];if(x<w-1)v=Math.min(v,d[i+1]+1);if(y<h-1)v=Math.min(v,d[i+w]+1);if(x<w-1&&y<h-1)v=Math.min(v,d[i+w+1]+1.414);d[i]=v}return d}
+function makeMask(text,w,h,fontPx){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d',{willReadFrequently:true});g.clearRect(0,0,w,h);g.fillStyle='#fff';g.textAlign='center';g.textBaseline='middle';g.font=`900 ${fontPx}px "Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif`;g.fillText(text,w/2,h/2+fontPx*.035);const a=g.getImageData(0,0,w,h).data,m=new Uint8Array(w*h);for(let i=0,j=0;i<a.length;i+=4,j++)m[j]=a[i+3]>64?1:0;return{m,d:edt(m,w,h),w,h}}
+function sampleTarget(mask,count,scaleX,scaleY,zMax){const pts=[];for(let y=1;y<mask.h-1;y++)for(let x=1;x<mask.w-1;x++)if(mask.m[y*mask.w+x])pts.push([x,y,mask.d[y*mask.w+x]]);const out=new Float32Array(count*3);for(let i=0;i<count;i++){const p=pts[Math.floor(rnd()*pts.length)],edge=clamp(p[2]/10,0,1);out[i*3]=(p[0]/mask.w-.5)*scaleX+(rnd()-.5)*.004;out[i*3+1]=(.5-p[1]/mask.h)*scaleY+(rnd()-.5)*.004;const thick=(.008+.095*edge)*zMax;out[i*3+2]=(rnd()*2-1)*thick}return out}
+let riseTarget=null,glyphTargets=[];
+function buildTargets(){seed=0x1234abcd;riseTarget=sampleTarget(makeMask('おどろいて',512,160,92),N,1.74,.54,1);glyphTargets=chars.map(ch=>sampleTarget(makeMask(ch,256,256,210),N,1.08,1.08,1.35))}
+function startRise(){const a=new Float32Array(N*3);for(let i=0;i<N;i++){a[i*3]=(rnd()*2-1)*1.35;a[i*3+1]=-.66+Math.pow(rnd(),2)*.075;a[i*3+2]=(rnd()-.5)*1.2}return a}
+function startGlyph(){const a=new Float32Array(N*3),cols=Math.ceil(Math.sqrt(N*1.8));for(let i=0;i<N;i++){const x=i%cols,y=Math.floor(i/cols),j=(rnd()-.5)*.009;a[i*3]=(x/(cols-1)-.5)*2.15+j;a[i*3+1]=(.5-y/(Math.ceil(N/cols)-1))*1.25+j;a[i*3+2]=-.22+(rnd()-.5)*.06}return a}
+function meta(){const a=new Float32Array(N*4);for(let i=0;i<N;i++){a[i*4]=rnd();a[i*4+1]=rnd();a[i*4+2]=rnd();a[i*4+3]=.65+rnd()*1.65}return a}
+let starts,metas;
+function upload(buf,data,usage=gl.STATIC_DRAW){gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,data,usage)}
+function applyMode(reset=true){seed=0x1234abcd+(mode?77:0);starts=mode?startGlyph():startRise();metas=meta();upload(bStart,starts);upload(bMeta,metas);upload(bTarget,mode?glyphTargets[charIndex]:riseTarget,gl.DYNAMIC_DRAW);if(reset){t0=performance.now();charIndex=0;lastChar=-1}document.body.classList.toggle('light',mode===0);document.getElementById('rise').classList.toggle('active',mode===0);document.getElementById('glyph').classList.toggle('active',mode===1);title.textContent=mode?'GLYPH / FIELD':'RISE / TYPE';sub.textContent=mode?'MICRO FIELD → GLYPH → FIELD':'FLOOR → SENTENCE → FLOOR'}
+function fit(){W=innerWidth;H=innerHeight;DPR=Math.min(devicePixelRatio||1,1.5);canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);canvas.style.width=W+'px';canvas.style.height=H+'px';N=preview?16000:(reduce?26000:(Math.min(W,H)<650?56000:92000));status.innerHTML=`${Math.round(N/1000)}K PARTICLES<br>POST BLOOM`;resizeFbo();buildTargets();applyMode(false)}
+function switchMode(m){if(mode===m)return;mode=m;applyMode(true);history.replaceState(null,'',m?'?mode=glyph':'?mode=rise')}
+document.getElementById('rise').onclick=()=>switchMode(0);document.getElementById('glyph').onclick=()=>switchMode(1);
+canvas.addEventListener('pointerdown',e=>{down=true;px=e.clientX;py=e.clientY;canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!down)return;targetDragX+=(e.clientX-px)*.004;targetDragY+=(e.clientY-py)*.003;px=e.clientX;py=e.clientY});canvas.addEventListener('pointerup',()=>down=false);
+function draw(now){dragX+=(targetDragX-dragX)*.06;dragY+=(targetDragY-dragY)*.06;const dur=mode?5200:7600;let phase=preview?.48:((now-t0)%dur)/dur;if(mode){const ci=Math.floor((now-t0)/dur)%chars.length;if(ci!==lastChar){charIndex=ci;upload(bTarget,glyphTargets[charIndex],gl.DYNAMIC_DRAW);lastChar=ci}}
+ gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);gl.viewport(0,0,canvas.width,canvas.height);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.useProgram(pp);gl.bindVertexArray(vao);gl.uniform1f(gl.getUniformLocation(pp,'uTime'),now*.001);gl.uniform1f(gl.getUniformLocation(pp,'uPhase'),phase);gl.uniform1f(gl.getUniformLocation(pp,'uAspect'),W/H);gl.uniform1f(gl.getUniformLocation(pp,'uPointScale'),DPR*(mode?2.25:2.05));gl.uniform1f(gl.getUniformLocation(pp,'uMode'),mode);gl.uniform1f(gl.getUniformLocation(pp,'uYaw'),dragX+(mode?.03:0));gl.uniform1f(gl.getUniformLocation(pp,'uPitch'),dragY+(mode?-.02:0));gl.drawArrays(gl.POINTS,0,N);gl.bindVertexArray(null);gl.disable(gl.BLEND);
+ gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);gl.useProgram(post);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(gl.getUniformLocation(post,'tScene'),0);gl.uniform2f(gl.getUniformLocation(post,'uTexel'),1/canvas.width,1/canvas.height);gl.uniform1f(gl.getUniformLocation(post,'uMode'),mode);gl.drawArrays(gl.TRIANGLES,0,3);requestAnimationFrame(draw)}
+addEventListener('resize',()=>{clearTimeout(window.__rt);window.__rt=setTimeout(fit,120)});fit();applyMode(true);requestAnimationFrame(draw);
 })();
 </script>
 </body>
