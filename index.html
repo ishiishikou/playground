@@ -3,103 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#02060b">
+<meta name="theme-color" content="#000000">
 <title>Particle Type Studies</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02060b}
-body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;transition:background .2s}
-body.light{background:linear-gradient(180deg,#f6f5f0 0%,#f4f3ee 58%,#ebeae5 100%)}
-canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
-.controls{position:fixed;left:50%;bottom:max(14px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:5px;padding:4px;border-radius:999px;background:rgba(0,0,0,.26);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;transition:opacity .25s;pointer-events:none}
-body.show-controls .controls{opacity:1;pointer-events:auto}.controls button{border:0;border-radius:999px;background:transparent;color:rgba(255,255,255,.6);font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 12px}.controls button.active{background:rgba(255,255,255,.15);color:white}
-body.light .controls{background:rgba(255,255,255,.62)}body.light .controls button{color:rgba(20,30,40,.55)}body.light .controls button.active{background:rgba(20,30,40,.1);color:#111827}
-.error{position:fixed;inset:0;display:none;place-items:center;color:white;background:#02060b;font:12px ui-monospace,monospace}.error.on{display:grid}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+body{display:grid;place-items:center;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+.stage{position:relative;width:min(100vw,calc(100vh * 1.5148));aspect-ratio:512/338;overflow:hidden;background:#000}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.controls{position:fixed;left:50%;bottom:max(14px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(18,18,18,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;transition:.2s;pointer-events:none;z-index:3}
+body.show-controls .controls{opacity:1;pointer-events:auto}.controls button{border:0;border-radius:999px;background:transparent;color:#aaa;font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:9px 12px}.controls button.active{background:#2b2b2b;color:#fff}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div class="controls"><button id="bRise">01 RISE</button><button id="bGlyph">02 GLYPH</button></div>
-<div class="error" id="err">WebGL2 required</div>
+<div class="stage"><canvas id="c" width="512" height="338"></canvas></div>
+<div class="controls"><button id="rise">01 RISE</button><button id="glyph">02 GLYPH</button></div>
 <script>
 (()=>{'use strict';
-const canvas=document.getElementById('c');
-const gl=canvas.getContext('webgl2',{antialias:false,alpha:true,premultipliedAlpha:false});
-if(!gl){document.getElementById('err').classList.add('on');return;}
-const qs=new URLSearchParams(location.search);
-let mode=qs.get('mode')==='glyph'?1:0;
-const preview=qs.get('preview')==='1';
-const forcedPhase=qs.has('phase')?clamp(parseFloat(qs.get('phase')),0,1):null;
+const W=512,H=338,canvas=document.getElementById('c'),ctx=canvas.getContext('2d',{alpha:false});
+const qs=new URLSearchParams(location.search);let mode=qs.get('mode')==='glyph'?1:0;
+const forcedPhase=qs.has('phase')?Math.max(0,Math.min(1,+qs.get('phase'))):null;
 const forcedItem=qs.has('item')?Math.max(0,parseInt(qs.get('item'),10)||0):null;
-const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const preview=qs.get('preview')==='1';
 const PHRASES=['おどろいた？','HTML 1枚','楽しすぎ'];
-const GLYPHS=['異','光','影','文'];
-const WHITE_PALETTE=Array.from('あいうえおかきくけこさしすせそたちつてとなにぬねのABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789？！+-*/').slice(0,64);
-const DARK_PALETTE=Array.from(' abcdefghijklmnopqrstuvwxyz0123456789(){}[];=+-*/.,:_<>?\'"!&|%#@').slice(0,64);
-const CODE_LINES=[
-'const canvas=document.queryselector(canvas);',
-'const ctx=canvas.getcontext(webgl2);',
-'let width=window.innerwidth; let height=window.innerheight;',
-'function clamp(x,a,b){return math.max(a,math.min(b,x));}',
-'function smooth(a,b,x){let t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}',
-'for(let y=0;y<height;y++){for(let x=0;x<width;x++){',
-'let d=distancefield[y*width+x]; let bevel=clamp(d/14,0,1);',
-'vec3 position=mix(start,target,phase); position.z+=bevel*depth;',
-'gl_position=projection*view*model*vec4(position,1);',
-'float light=max(dot(normal,normalize(vec3(1,1,2))),0);',
-'if(mask>0){color=mix(base,highlight,light);}',
-'requestanimationframe(render); return position;'
+const GLYPHS=['驚','異','光','影'];
+const WHITE_CHARS=Array.from('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789？！+ー');
+const CODE=[
+'var canvas=document.createElement("canvas"); var ctx=canvas.getContext("2d");',
+'var SCALE=W/2; var DEPTH=0.26, ROUND=0.04; for(var y=0;y<h;y++){',
+'for(var x=0;x<w;x++){ var i=(y*w+x)*4; var a=img[i+3]; mask[y*w+x]=a>18; }',
+'function sdf(mask,w,h){ var out=new Float32Array(w*h); var INF=1e9;',
+'for(var y=0;y<h;y++) for(var x=0;x<w;x++){ var i=y*w+x; var d=mask[i]?INF:0;',
+'out[i]=Math.min(d,left+1,up+1,diag+1.414); } return out;',
+'var img=ctx.getImageData(0,0,W,H), sdf=distanceField(mask,W,H);',
+'function mapGlyph(px,py,z){ var perspective=1/(1.8-z*.62); return [px*perspective,py*perspective]; }',
+'var col=shade(normal,light); if(edge<ROUND) col=mix(side,face,edge/ROUND);',
+'for(var layer=0;layer<DEPTH;layer+=0.02){ drawCodeTexture(layer); }',
+'requestAnimationFrame(render); ctx.fillText(source,rowX,rowY); return frame;',
+'const glyphs=["驚","異","光","影"]; const source="文字 → 立体";'
 ];
-let W=1,H=1,DPR=1,N=0,phaseStart=performance.now(),lastItem=-1;
-let seed=0x58f2a51d,cols=0,rows=0,start,target,meta,targets=[];
-let drag=0,dragT=0,pitch=0,pitchT=0,down=false,px=0,py=0;
-function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296}
-function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
-function paletteIndex(palette,ch){const i=palette.indexOf(ch);return i<0?0:i}
-function makeAtlas(chars,font){const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');g.clearRect(0,0,512,512);g.fillStyle='#fff';g.textAlign='center';g.textBaseline='middle';g.font=font;for(let i=0;i<64;i++){const ch=chars[i]||' ';g.fillText(ch,(i%8+.5)*64,(Math.floor(i/8)+.5)*64)}const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t}
-const whiteTex=makeAtlas(WHITE_PALETTE,'700 52px "Noto Sans CJK JP","Hiragino Sans","Yu Gothic",sans-serif');
-const darkTex=makeAtlas(DARK_PALETTE,'600 47px ui-monospace,SFMono-Regular,Menlo,monospace');
-const VS=`#version 300 es
-precision highp float;
-layout(location=0)in vec3 aStart;layout(location=1)in vec3 aTarget;layout(location=2)in vec4 aMeta;
-uniform float uPhase,uMode,uAspect,uDpr,uTime,uYaw,uPitch;
-out vec3 vCol;out float vA;flat out int vCell;
-float sat(float x){return clamp(x,0.,1.);}float sm(float a,float b,float x){float t=sat((x-a)/(b-a));return t*t*(3.-2.*t);}mat3 ry(float a){float c=cos(a),s=sin(a);return mat3(c,0,s,0,1,0,-s,0,c);}mat3 rx(float a){float c=cos(a),s=sin(a);return mat3(1,0,0,0,c,-s,0,s,c);}
-void main(){
- float delay=aMeta.x*(uMode<.5?.14:.07);float enter=sm(.06+delay,.38+delay,uPhase);float leave=sm(.77+delay*.12,.985,uPhase);float k=enter*(1.-leave);vec3 p=mix(aStart,aTarget,k);
- if(uMode<.5){p.x+=sin(aMeta.y*73.2+uTime*.45)*.003*(1.-k);p.z+=cos(aMeta.z*55.+uTime*.4)*.006*(1.-k);}else{
-   float lift=max(aTarget.z-aStart.z,0.);float gm=sat(lift*24.);float turn=mix(-1.08,0.,sm(.02,.34,uPhase))+mix(0.,1.08,sm(.76,.99,uPhase));
-   vec3 gp=ry(turn+uYaw)*rx(uPitch)*p;p=mix(p,gp,gm);
- }
- float z=1.80-p.z*.62;float persp=1./z;vec2 q=vec2(p.x/uAspect,p.y)*persp;gl_Position=vec4(q,0,1);
- float raised=sat((p.z-aStart.z)*4.6);float size=uMode<.5?mix(2.9,4.1,k)*mix(.78,1.18,aMeta.z):mix(2.7,3.35,raised);gl_PointSize=size*uDpr;
- if(uMode<.5){vCol=mix(vec3(.23,.27,.32),vec3(.07,.13,.24),k);vA=mix(.35,.78,k);}else{vCol=mix(vec3(.055,.085,.12),vec3(.72,.73,.72),raised);vA=mix(.66,.98,raised);}vCell=int(floor(aMeta.w*63.999));
-}`;
-const FS=`#version 300 es
-precision highp float;in vec3 vCol;in float vA;flat in int vCell;uniform sampler2D uAtlas;out vec4 o;
-void main(){int cx=vCell%8,cy=vCell/8;vec2 cell=vec2(.125);vec2 uv=(vec2(float(cx),float(cy))+gl_PointCoord)*cell;float a=texture(uAtlas,uv).a;if(a<.07)discard;o=vec4(vCol,vA*pow(a,.72));}`;
-function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
-function makeProgram(){const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,VS));gl.attachShader(p,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));return p}
-const prog=makeProgram(),vao=gl.createVertexArray(),b0=gl.createBuffer(),b1=gl.createBuffer(),bm=gl.createBuffer();
-gl.bindVertexArray(vao);function attr(b,l,n){gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,n,gl.FLOAT,false,0,0)}attr(b0,0,3);attr(b1,1,3);attr(bm,2,4);gl.bindVertexArray(null);
-function upload(b,a,usage=gl.STATIC_DRAW){gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,a,usage)}
-function raster(text,w=640,h=200,maxFont=118){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.textAlign='center';g.textBaseline='middle';let size=maxFont;do{g.font=`900 ${size}px "Noto Sans CJK JP","Hiragino Sans","Yu Gothic",sans-serif`;if(g.measureText(text).width<w*.88)break;size-=4}while(size>54);g.fillText(text,w/2,h/2);const d=g.getImageData(0,0,w,h).data,m=new Uint8Array(w*h);for(let i=0,j=0;i<d.length;i+=4,j++)m[j]=d[i+3]>64?1:0;return{m,w,h}}
-function distance(m,w,h){const INF=1e4,a=new Float32Array(w*h);for(let i=0;i<a.length;i++)a[i]=m[i]?INF:0;for(let y=0;y<h;y++)for(let x=0;x<w;x++){let i=y*w+x,v=a[i];if(x)v=Math.min(v,a[i-1]+1);if(y)v=Math.min(v,a[i-w]+1);if(x&&y)v=Math.min(v,a[i-w-1]+1.414);a[i]=v}for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){let i=y*w+x,v=a[i];if(x<w-1)v=Math.min(v,a[i+1]+1);if(y<h-1)v=Math.min(v,a[i+w]+1);if(x<w-1&&y<h-1)v=Math.min(v,a[i+w+1]+1.414);a[i]=v}return a}
-function phraseTarget(text,count,scale){const M=raster(text),pts=[];for(let y=2;y<M.h-2;y+=2)for(let x=2;x<M.w-2;x+=2)if(M.m[y*M.w+x])pts.push([x,y]);const out=new Float32Array(count*3);for(let i=0;i<count;i++){if(rnd()<.045){out[i*3]=(rnd()*2-1)*.82;out[i*3+1]=.05+(rnd()-.5)*.28;out[i*3+2]=(rnd()-.5)*.05;continue}const q=pts[(rnd()*pts.length)|0];out[i*3]=(q[0]/M.w-.5)*scale+(rnd()-.5)*.006;out[i*3+1]=(.5-q[1]/M.h)*.52+.08+(rnd()-.5)*.006;out[i*3+2]=(rnd()-.5)*.016}return out}
-function riseStart(count){const a=new Float32Array(count*3);for(let i=0;i<count;i++){a[i*3]=(rnd()*2-1)*1.34;a[i*3+1]=rnd()<.055?(-.72+rnd()*.30):(-.84+Math.pow(rnd(),2.4)*.105);a[i*3+2]=(rnd()*2-1)*.30}return a}
-function glyphField(count,c,r){const a=new Float32Array(count*3);for(let i=0;i<count;i++){const x=i%c,y=(i/c)|0;a[i*3]=(x/(c-1)-.5)*2.22;a[i*3+1]=(.5-y/(r-1))*1.08;a[i*3+2]=-.15+(rnd()-.5)*.004}return a}
-function glyphTarget(ch,base,c,r){const M=raster(ch,256,256,218),D=distance(M.m,M.w,M.h),out=new Float32Array(base);for(let i=0;i<N;i++){const x=i%c,y=(i/c)|0,ux=x/(c-1),uy=y/(r-1);const gx=(ux-.5)/.44+.5,gy=(uy-.5)/.54+.5;if(gx<0||gx>1||gy<0||gy>1)continue;const mx=clamp((gx*255)|0,0,255),my=clamp((gy*255)|0,0,255),k=my*256+mx;if(M.m[k]){const e=clamp(D[k]/13,0,1);out[i*3+2]=-.10+.23*e;}}return out}
-function whiteMeta(count){const a=new Float32Array(count*4);for(let i=0;i<count;i++){a[i*4]=rnd();a[i*4+1]=rnd();a[i*4+2]=rnd();const idx=(rnd()*64)|0;a[i*4+3]=(idx+.5)/64}return a}
-function darkMeta(count,c){const a=new Float32Array(count*4);for(let i=0;i<count;i++){const x=i%c,y=(i/c)|0,line=CODE_LINES[y%CODE_LINES.length];const ch=line[(x+(y%5)*7)%line.length]||' ';const idx=paletteIndex(DARK_PALETTE,ch);a[i*4]=rnd();a[i*4+1]=rnd();a[i*4+2]=rnd();a[i*4+3]=(idx+.5)/64}return a}
-function rebuild(reset=true){seed=0x58f2a51d+(mode?912:0);if(mode===0){N=reduced?1100:1650;start=riseStart(N);targets=[phraseTarget(PHRASES[0],N,1.22),phraseTarget(PHRASES[1],N,1.08),phraseTarget(PHRASES[2],N,.94)];meta=whiteMeta(N);}else{cols=Math.min(W,H)<650?154:190;rows=Math.max(68,Math.round(cols*.48));N=cols*rows;start=glyphField(N,cols,rows);targets=GLYPHS.map(ch=>glyphTarget(ch,start,cols,rows));meta=darkMeta(N,cols);}target=targets[0];upload(b0,start);upload(b1,target,gl.DYNAMIC_DRAW);upload(bm,meta);lastItem=-1;if(reset)phaseStart=performance.now();document.body.classList.toggle('light',mode===0);document.getElementById('bRise').classList.toggle('active',mode===0);document.getElementById('bGlyph').classList.toggle('active',mode===1);gl.clearColor(0,0,0,0)}
-function fit(){W=innerWidth;H=innerHeight;DPR=Math.min(devicePixelRatio||1,1.65);canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);canvas.style.width=W+'px';canvas.style.height=H+'px';gl.viewport(0,0,canvas.width,canvas.height);rebuild(false)}
-function switchMode(m){if(mode===m)return;mode=m;rebuild(true);history.replaceState(null,'',m?'?mode=glyph':'?mode=rise')}
-document.getElementById('bRise').onclick=()=>switchMode(0);document.getElementById('bGlyph').onclick=()=>switchMode(1);
-let hideTimer;function showControls(){document.body.classList.add('show-controls');clearTimeout(hideTimer);hideTimer=setTimeout(()=>document.body.classList.remove('show-controls'),1800)}
-canvas.addEventListener('pointerdown',e=>{showControls();down=true;px=e.clientX;py=e.clientY});canvas.addEventListener('pointermove',e=>{if(!down||mode===0)return;dragT=clamp(dragT+(e.clientX-px)*.0012,-.32,.32);pitchT=clamp(pitchT+(e.clientY-py)*.0008,-.09,.09);px=e.clientX;py=e.clientY});canvas.addEventListener('pointerup',()=>down=false);canvas.addEventListener('pointercancel',()=>down=false);
-const U={};['uPhase','uMode','uAspect','uDpr','uTime','uYaw','uPitch','uAtlas'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
-function frame(now){drag+=(dragT-drag)*.06;pitch+=(pitchT-pitch)*.06;const dur=mode?4400:7900,total=targets.length;const elapsed=Math.max(0,now-phaseStart);const item=forcedItem!==null?forcedItem%total:Math.floor(elapsed/dur)%total;const ph=forcedPhase!==null?forcedPhase:(preview?.50:(elapsed%dur)/dur);if(item!==lastItem){target=targets[item];upload(b1,target,gl.DYNAMIC_DRAW);lastItem=item}
- gl.clear(gl.COLOR_BUFFER_BIT);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.useProgram(prog);gl.bindVertexArray(vao);gl.uniform1f(U.uPhase,ph);gl.uniform1f(U.uMode,mode);gl.uniform1f(U.uAspect,W/H);gl.uniform1f(U.uDpr,DPR);gl.uniform1f(U.uTime,now*.001);gl.uniform1f(U.uYaw,mode?drag:0);gl.uniform1f(U.uPitch,mode?pitch:0);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,mode?darkTex:whiteTex);gl.uniform1i(U.uAtlas,0);gl.drawArrays(gl.POINTS,0,N);gl.bindVertexArray(null);gl.disable(gl.BLEND);requestAnimationFrame(frame)}
-addEventListener('resize',()=>{clearTimeout(window.__r);window.__r=setTimeout(fit,100)});fit();rebuild(true);requestAnimationFrame(frame);
+let seed=0x137a9b31;function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/4294967296}
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const smooth=(a,b,x)=>{let t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+function fitTextMask(text,w=430,h=120,max=90){const o=document.createElement('canvas');o.width=w;o.height=h;const g=o.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.textAlign='center';g.textBaseline='middle';let s=max;do{g.font=`900 ${s}px "Noto Sans CJK JP","Hiragino Sans","Yu Gothic",sans-serif`;if(g.measureText(text).width<w*.92)break;s-=2}while(s>42);g.fillText(text,w/2,h/2);const d=g.getImageData(0,0,w,h).data,m=new Uint8Array(w*h);for(let i=0,j=0;i<d.length;i+=4,j++)m[j]=d[i+3]>70?1:0;return{m,w,h}}
+function sampleMask(text,count,targetWidth){const M=fitTextMask(text),pts=[];for(let y=2;y<M.h-2;y+=2)for(let x=2;x<M.w-2;x+=2)if(M.m[y*M.w+x])pts.push([x,y]);const out=[];for(let i=0;i<count;i++){const q=pts[(rnd()*pts.length)|0];out.push({x:256+(q[0]/M.w-.5)*targetWidth+(rnd()-.5)*2.0,y:164+(q[1]/M.h-.5)*76+(rnd()-.5)*1.4})}return out}
+let whiteSets=[];
+function buildWhite(){seed=0x14a8f227;const n=980;whiteSets=PHRASES.map((p,i)=>sampleMask(p,n,[305,322,278][i]));const parts=[];for(let i=0;i<n;i++){const r=rnd();parts.push({sx:rnd()*W,sy:r<.90?308+Math.pow(rnd(),1.7)*25:235+rnd()*72,z:rnd(),d:rnd(),ch:WHITE_CHARS[(rnd()*WHITE_CHARS.length)|0],size:3.4+rnd()*2.6,alpha:.50+rnd()*.36})}return parts}
+const whiteParts=buildWhite();
+function drawWhite(ph,item){ctx.fillStyle='#f7f6f1';ctx.fillRect(0,0,W,H);const tgt=whiteSets[item];for(let i=0;i<whiteParts.length;i++){const p=whiteParts[i],t=tgt[i];const delay=p.d*.10;let up=smooth(.07+delay,.38+delay,ph),down=smooth(.76+delay*.16,.985,ph),k=up*(1-down);k=clamp(k,0,1);const wob=(1-k)*Math.sin(i*1.73+ph*7)*.9;let x=p.sx+(t.x-p.sx)*k+wob;let y=p.sy+(t.y-p.sy)*k;if(i%19===0){x+=Math.sin(i*.7+ph*5)*6*k;y+=Math.cos(i*.33+ph*4)*5*k}ctx.globalAlpha=(.38+(p.alpha-.38)*k)*(i%23===0?.72:1);ctx.fillStyle=k>.55?'#15294a':'#24354d';ctx.font=`${Math.max(3,p.size*(.88+.12*k)).toFixed(1)}px "Noto Sans CJK JP","Hiragino Sans","Yu Gothic",sans-serif`;ctx.fillText(p.ch,x,y)}ctx.globalAlpha=1;ctx.fillStyle='rgba(75,79,84,.28)';ctx.font='4px "Noto Sans CJK JP","Hiragino Sans","Yu Gothic",sans-serif';ctx.textAlign='center';ctx.fillText('クリック',256,329);ctx.textAlign='start'}
+function makeCodeCanvas(bright=false){const o=document.createElement('canvas');o.width=W;o.height=H;const g=o.getContext('2d');g.fillStyle='#03070c';g.fillRect(0,0,W,H);g.textBaseline='top';g.font=`${bright?6.3:5.7}px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace`;const lh=bright?7.15:6.7;for(let y=-2,row=0;y<H+10;y+=lh,row++){const line=CODE[row%CODE.length];let s='';while(s.length<160)s+=line+' ';const off=-(row%7)*13-(row%3)*5;g.fillStyle=bright?'rgba(224,228,230,.92)':'rgba(40,63,88,.42)';g.fillText(s,off,y)}return o}
+const codeBg=makeCodeCanvas(false),codeFace=makeCodeCanvas(true);
+const glyphMasks=GLYPHS.map(ch=>{const o=document.createElement('canvas');o.width=W;o.height=H;const g=o.getContext('2d');g.fillStyle='#fff';g.textAlign='center';g.textBaseline='middle';g.font='900 154px "Noto Sans CJK JP","Hiragino Sans","Yu Gothic",sans-serif';g.fillText(ch,256,169);return o});
+function clipTexture(texture,mask){const o=document.createElement('canvas');o.width=W;o.height=H;const g=o.getContext('2d');g.drawImage(texture,0,0);g.globalCompositeOperation='destination-in';g.drawImage(mask,0,0);g.globalCompositeOperation='source-over';return o}
+const glyphFaces=glyphMasks.map(m=>clipTexture(codeFace,m));
+const glyphBases=glyphMasks.map(m=>clipTexture(codeBg,m));
+function drawTransformed(img,angle,depth,alpha=1){const c=Math.cos(angle),s=Math.sin(angle),cx=256,cy=169;ctx.save();ctx.globalAlpha=alpha;ctx.translate(cx+s*depth,cy);ctx.transform(c,0,0,1,0,0);ctx.translate(-cx,-cy);ctx.drawImage(img,0,0);ctx.restore()}
+function drawGlyph(ph,item){ctx.fillStyle='#02060b';ctx.fillRect(0,0,W,H);ctx.globalAlpha=1;ctx.drawImage(codeBg,0,0);const enter=smooth(.03,.28,ph),leave=smooth(.78,.985,ph);const hold=enter*(1-leave);const angle=(-1.36*(1-enter))+(1.36*leave);const depth=14*hold;const face=glyphFaces[item],mask=glyphMasks[item];for(let d=depth;d>0;d-=1.5){ctx.save();ctx.globalAlpha=.13+.22*(1-d/Math.max(depth,1));ctx.fillStyle='#20334b';const c=Math.cos(angle),s=Math.sin(angle),cx=256,cy=169;ctx.translate(cx+s*d,cy);ctx.transform(c,0,0,1,0,0);ctx.translate(-cx,-cy);ctx.drawImage(mask,0,0);ctx.globalCompositeOperation='source-in';ctx.fillRect(0,0,W,H);ctx.restore()}ctx.save();ctx.filter='blur(2px)';drawTransformed(face,angle,depth,.20*hold);ctx.restore();drawTransformed(face,angle,depth,.96*hold+.04);if(hold<.98)drawTransformed(glyphBases[item],angle,0,.18*(1-hold))}
+let start=performance.now();
+function render(now){const dur=mode?4300:7600,total=mode?GLYPHS.length:PHRASES.length,elapsed=now-start,item=forcedItem!==null?forcedItem%total:Math.floor(elapsed/dur)%total,ph=forcedPhase!==null?forcedPhase:(preview?.5:(elapsed%dur)/dur);if(mode)drawGlyph(ph,item);else drawWhite(ph,item);requestAnimationFrame(render)}
+function setMode(m){mode=m;start=performance.now();document.getElementById('rise').classList.toggle('active',!m);document.getElementById('glyph').classList.toggle('active',!!m);history.replaceState(null,'',m?'?mode=glyph':'?mode=rise')}
+document.getElementById('rise').onclick=()=>setMode(0);document.getElementById('glyph').onclick=()=>setMode(1);let ht;canvas.addEventListener('pointerdown',()=>{document.body.classList.add('show-controls');clearTimeout(ht);ht=setTimeout(()=>document.body.classList.remove('show-controls'),1800)});document.getElementById('rise').classList.toggle('active',!mode);document.getElementById('glyph').classList.toggle('active',!!mode);requestAnimationFrame(render);
 })();
 </script>
 </body></html>
