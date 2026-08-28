@@ -25,23 +25,24 @@ jobs:
           python3 -m http.server 8000 >/tmp/particle-http.log 2>&1 &
           sleep 1
           FLAGS="--headless --no-sandbox --disable-dev-shm-usage --enable-unsafe-swiftshader --use-gl=angle --use-angle=swiftshader-webgl --window-size=430,932"
-          google-chrome $FLAGS --virtual-time-budget=1200 \
-            --screenshot=preview-rise.png \
-            'http://127.0.0.1:8000/index.html?mode=rise&preview=1'
-          google-chrome $FLAGS --virtual-time-budget=1200 \
-            --screenshot=preview-glyph.png \
-            'http://127.0.0.1:8000/index.html?mode=glyph&preview=1'
-          test -s preview-rise.png
-          test -s preview-glyph.png
+          render() {
+            file="$1"; url="$2"
+            google-chrome $FLAGS --virtual-time-budget=1000 --screenshot="$file" "$url"
+            test -s "$file"
+          }
+          render preview-rise-start.png 'http://127.0.0.1:8000/index.html?mode=rise&preview=1&phase=0.03'
+          render preview-rise.png       'http://127.0.0.1:8000/index.html?mode=rise&preview=1&phase=0.50'
+          render preview-rise-end.png   'http://127.0.0.1:8000/index.html?mode=rise&preview=1&phase=0.90'
+          render preview-glyph-start.png 'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&phase=0.03'
+          render preview-glyph.png       'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&phase=0.50'
+          render preview-glyph-end.png   'http://127.0.0.1:8000/index.html?mode=glyph&preview=1&phase=0.90'
       - name: Upload previews
         uses: actions/upload-artifact@v4
         with:
           name: rendered-previews
-          path: |
-            preview-rise.png
-            preview-glyph.png
+          path: preview-*.png
           retention-days: 1
-      - name: Commit previews
+      - name: Commit peak previews
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
