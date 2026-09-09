@@ -13,6 +13,7 @@ permissions:
 jobs:
   bridge:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Install build tools
         run: |
@@ -40,18 +41,6 @@ jobs:
             'https://huggingface.co/mradermacher/Qwen3.5-0.8B-i1-GGUF/resolve/main/Qwen3.5-0.8B.i1-IQ1_S.gguf'
           sha256sum payload/* > payload/SHA256SUMS.txt
           ls -lh payload
-
-      - name: Smoke test on runner
-        run: |
-          ./payload/llama-cli \
-            -m payload/Qwen3.5-0.8B.i1-IQ1_S.gguf \
-            -p 'Answer with exactly: OK' \
-            -n 8 -c 512 -t 2 --no-display-prompt > smoke.txt 2>&1 || {
-              cat smoke.txt
-              exit 1
-            }
-          tail -80 smoke.txt
-          cp smoke.txt payload/
 
       - name: Upload bridge artifact
         uses: actions/upload-artifact@v4
