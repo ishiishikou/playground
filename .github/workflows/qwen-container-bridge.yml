@@ -1,4 +1,4 @@
-name: Qwen Container Bridge
+name: Qwen Container Bridge Cleanup
 
 on:
   push:
@@ -8,29 +8,18 @@ on:
       - .github/workflows/qwen-container-bridge.yml
 
 permissions:
+  actions: write
   contents: read
 
 jobs:
-  bridge:
+  cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Download Qwen and prebuilt llama.cpp
+      - name: Cancel stale run and delete temporary artifacts
         run: |
-          mkdir -p payload
-          curl -L --fail --retry 3 --retry-delay 2 \
-            -o payload/Qwen3.5-0.8B.i1-IQ1_S.gguf \
-            'https://huggingface.co/mradermacher/Qwen3.5-0.8B-i1-GGUF/resolve/main/Qwen3.5-0.8B.i1-IQ1_S.gguf'
-          curl -L --fail --retry 3 --retry-delay 2 \
-            -o payload/llama-b10809-bin-ubuntu-x64.tar.gz \
-            'https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-ubuntu-x64.tar.gz'
-          sha256sum payload/* > payload/SHA256SUMS.txt
-          ls -lh payload
-
-      - name: Upload bridge artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qwen-container-bridge-prebuilt
-          path: payload/
-          retention-days: 1
-          compression-level: 0
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/34375534970/cancel" || true
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/10114210436" || true
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/10114268141" || true
