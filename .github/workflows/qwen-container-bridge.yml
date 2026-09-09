@@ -13,39 +13,24 @@ permissions:
 jobs:
   bridge:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Install build tools
+      - name: Download Qwen and prebuilt llama.cpp
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq cmake ninja-build >/dev/null
-
-      - name: Build static llama.cpp tools
-        run: |
-          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git
-          cmake -S llama.cpp -B llama.cpp/build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DGGML_NATIVE=OFF \
-            -DLLAMA_CURL=OFF
-          cmake --build llama.cpp/build --target llama-cli llama-bench -j2
           mkdir -p payload
-          cp llama.cpp/build/bin/llama-cli payload/
-          cp llama.cpp/build/bin/llama-bench payload/
-          git -C llama.cpp rev-parse HEAD > payload/LLAMA_CPP_COMMIT.txt
-
-      - name: Download Qwen3.5 0.8B IQ1_S
-        run: |
           curl -L --fail --retry 3 --retry-delay 2 \
             -o payload/Qwen3.5-0.8B.i1-IQ1_S.gguf \
             'https://huggingface.co/mradermacher/Qwen3.5-0.8B-i1-GGUF/resolve/main/Qwen3.5-0.8B.i1-IQ1_S.gguf'
+          curl -L --fail --retry 3 --retry-delay 2 \
+            -o payload/llama-b10809-bin-ubuntu-x64.tar.gz \
+            'https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-ubuntu-x64.tar.gz'
           sha256sum payload/* > payload/SHA256SUMS.txt
           ls -lh payload
 
       - name: Upload bridge artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qwen-container-bridge
+          name: qwen-container-bridge-prebuilt
           path: payload/
           retention-days: 1
           compression-level: 0
