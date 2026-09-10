@@ -24,19 +24,22 @@ jobs:
             gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" || true
           done
 
-      - name: Package agmsg and sqlite3
+      - name: Package agmsg and sqlite3 runtime
         run: |
           set -euxo pipefail
           git clone --depth 1 https://github.com/fujibee/agmsg.git agmsg
           sudo apt-get update -qq
           sudo apt-get install -y sqlite3
           tar -czf agmsg-main.tar.gz agmsg
-          cp "$(command -v sqlite3)" sqlite3
-          chmod +x sqlite3
-          ./sqlite3 --version > SQLITE_VERSION.txt
+          SQLITE_BIN="$(command -v sqlite3)"
+          SQLITE_LIB="$(ldd "$SQLITE_BIN" | awk '/libsqlite3.so.0/ {print $3; exit}')"
+          cp "$SQLITE_BIN" sqlite3.real
+          cp "$SQLITE_LIB" libsqlite3.so.0
+          chmod +x sqlite3.real
+          LD_LIBRARY_PATH="$PWD" ./sqlite3.real --version > SQLITE_VERSION.txt
           cat agmsg/VERSION > AGMSG_VERSION.txt
-          ldd sqlite3 > SQLITE_LDD.txt
-          sha256sum agmsg-main.tar.gz sqlite3 > SHA256SUMS.txt
+          ldd "$SQLITE_BIN" > SQLITE_LDD.txt
+          sha256sum agmsg-main.tar.gz sqlite3.real libsqlite3.so.0 > SHA256SUMS.txt
 
       - name: Upload bridge artifact
         uses: actions/upload-artifact@v4
@@ -44,7 +47,8 @@ jobs:
           name: agmsg-container-bridge
           path: |
             agmsg-main.tar.gz
-            sqlite3
+            sqlite3.real
+            libsqlite3.so.0
             SQLITE_VERSION.txt
             AGMSG_VERSION.txt
             SQLITE_LDD.txt
