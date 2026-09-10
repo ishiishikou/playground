@@ -2,11 +2,9 @@ name: Qwen 4B Container Bridge
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
     types: [opened, synchronize, reopened]
-    paths:
-      - .github/workflows/qwen4b-container-bridge.yml
+    paths: [.github/workflows/qwen4b-container-bridge.yml]
 
 permissions:
   actions: write
@@ -25,21 +23,21 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("qwen4b-part-")) | .id' | while read id; do
             gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" || true
           done
-      - name: Download model range part 2
+      - name: Download model range part 3
         run: |
           set -euxo pipefail
-          START=880803840
-          END=1321205759
-          curl -L --fail --retry 3 --retry-all-errors --range "${START}-${END}" -D headers.txt -o qwen4b.part.2 "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true"
-          test "$(stat -c%s qwen4b.part.2)" -gt 0
-          stat -c%s qwen4b.part.2 > PART_SIZE.txt
-          sha256sum qwen4b.part.2 > SHA256SUMS.txt
+          START=1321205760
+          END=1761607679
+          curl -L --fail --retry 3 --retry-all-errors --range "${START}-${END}" -D headers.txt -o qwen4b.part.3 "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true"
+          test "$(stat -c%s qwen4b.part.3)" -gt 0
+          stat -c%s qwen4b.part.3 > PART_SIZE.txt
+          sha256sum qwen4b.part.3 > SHA256SUMS.txt
       - name: Upload bridge artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qwen4b-part-2
+          name: qwen4b-part-3
           path: |
-            qwen4b.part.2
+            qwen4b.part.3
             PART_SIZE.txt
             SHA256SUMS.txt
             headers.txt
