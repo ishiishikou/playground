@@ -26,17 +26,17 @@ jobs:
       - name: Download model range
         run: |
           set -euxo pipefail
-          START=1761607680
-          END=2202009599
-          curl -L --fail --retry 3 --retry-all-errors --range "${START}-${END}" -o qwen4b.part.4 "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true"
-          test "$(stat -c%s qwen4b.part.4)" -eq 440401920
-          sha256sum qwen4b.part.4 > SHA256SUMS.txt
+          START=2202009600
+          END=2642411519
+          curl -L --fail --retry 3 --retry-all-errors --range "${START}-${END}" -o qwen4b.part.5 "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true"
+          test "$(stat -c%s qwen4b.part.5)" -eq 440401920
+          sha256sum qwen4b.part.5 > SHA256SUMS.txt
       - name: Upload bridge artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qwen4b-part-4
+          name: qwen4b-part-5
           path: |
-            qwen4b.part.4
+            qwen4b.part.5
             SHA256SUMS.txt
           retention-days: 1
           compression-level: 0
