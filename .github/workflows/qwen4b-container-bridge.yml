@@ -1,4 +1,4 @@
-name: AGMSG Container Bridge
+name: AGMSG Container Cleanup
 
 on:
   pull_request:
@@ -11,47 +11,15 @@ permissions:
   contents: read
 
 jobs:
-  bridge:
+  cleanup:
     if: github.head_ref == 'tmp-qwen4b-container-bridge'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Clean temporary artifacts
+      - name: Delete temporary bridge artifacts
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("qwen4b-part-") or .name == "agmsg-container-bridge") | .id' | while read id; do
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name == "agmsg-container-bridge") | .id' | while read id; do
             gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" || true
           done
-
-      - name: Package agmsg and sqlite3 runtime
-        run: |
-          set -euxo pipefail
-          git clone --depth 1 https://github.com/fujibee/agmsg.git agmsg
-          sudo apt-get update -qq
-          sudo apt-get install -y sqlite3
-          tar -czf agmsg-main.tar.gz agmsg
-          SQLITE_BIN="$(command -v sqlite3)"
-          SQLITE_LIB="$(ldd "$SQLITE_BIN" | awk '/libsqlite3.so.0/ {print $3; exit}')"
-          cp "$SQLITE_BIN" sqlite3.real
-          cp "$SQLITE_LIB" libsqlite3.so.0
-          chmod +x sqlite3.real
-          LD_LIBRARY_PATH="$PWD" ./sqlite3.real --version > SQLITE_VERSION.txt
-          cat agmsg/VERSION > AGMSG_VERSION.txt
-          ldd "$SQLITE_BIN" > SQLITE_LDD.txt
-          sha256sum agmsg-main.tar.gz sqlite3.real libsqlite3.so.0 > SHA256SUMS.txt
-
-      - name: Upload bridge artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: agmsg-container-bridge
-          path: |
-            agmsg-main.tar.gz
-            sqlite3.real
-            libsqlite3.so.0
-            SQLITE_VERSION.txt
-            AGMSG_VERSION.txt
-            SQLITE_LDD.txt
-            SHA256SUMS.txt
-          retention-days: 1
-          compression-level: 0
