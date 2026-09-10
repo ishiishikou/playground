@@ -1,4 +1,4 @@
-name: Qwen Container Bridge Cleanup
+name: Qwen 2B Container Bridge
 
 on:
   push:
@@ -12,14 +12,54 @@ permissions:
   contents: read
 
 jobs:
-  cleanup:
+  bridge:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
+      PART: "0"
+      CHUNK_MIB: "300"
+      MODEL_URL: "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen_Qwen3.5-2B-Q4_K_M.gguf"
     steps:
-      - name: Cancel stale run and delete temporary artifacts
+      - name: Remove previous bridge artifacts
+        shell: bash
         run: |
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/34375534970/cancel" || true
-          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/10114210436" || true
-          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/10114268141" || true
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("qwen2b-part-")) | .id' | while read -r id; do
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" || true
+          done
+
+      - name: Download one model range
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          chunk=$((CHUNK_MIB * 1024 * 1024))
+          start=$((PART * chunk))
+          end=$((start + chunk - 1))
+          echo "requesting bytes ${start}-${end}"
+          curl -L --fail --retry 3 --retry-delay 2 --range "${start}-${end}" -D headers.txt -o ranged.bin "$MODEL_URL"
+          got=$(stat -c %s ranged.bin)
+          echo "downloaded ${got} bytes"
+          if [ "$got" -gt "$chunk" ]; then
+            echo "Range was ignored; slicing full download locally"
+            dd if=ranged.bin of="payload/qwen2b.part${PART}" bs=1M skip=$((PART * CHUNK_MIB)) count="$CHUNK_MIB" status=none
+            total="$got"
+          else
+            mv ranged.bin "payload/qwen2b.part${PART}"
+            total=$(tr -d '\r' < headers.txt | awk 'tolower($1)=="content-range:" {split($3,a,"/"); print a[2]}' | tail -1)
+          fi
+          part_size=$(stat -c %s "payload/qwen2b.part${PART}")
+          printf 'part=%s\nstart=%s\nrequested_end=%s\npart_size=%s\ntotal=%s\n' "$PART" "$start" "$end" "$part_size" "${total:-unknown}" > payload/meta.txt
+          sha256sum "payload/qwen2b.part${PART}" > payload/sha256.txt
+          cat payload/meta.txt
+          cat payload/sha256.txt
+          test "$part_size" -gt 0
+          test "$part_size" -le "$chunk"
+
+      - name: Upload part artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen2b-part-${{ env.PART }}
+          path: payload/
+          retention-days: 1
+          compression-level: 0
