@@ -1,0 +1,48 @@
+name: Qwen 4B Container Bridge
+
+on:
+  push:
+    branches:
+      - tmp-qwen4b-container-bridge
+    paths:
+      - .github/workflows/qwen4b-container-bridge.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Clean previous temporary artifacts
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("qwen4b-part-")) | .id' | while read id; do
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" || true
+          done
+      - name: Download model range and llama.cpp
+        run: |
+          set -euxo pipefail
+          START=0
+          END=440401919
+          curl -L --fail --retry 3 --retry-all-errors --range "${START}-${END}" \
+            -o qwen4b.part.0 \
+            "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen_Qwen3.5-4B-Q4_K_M.gguf?download=true"
+          test "$(stat -c%s qwen4b.part.0)" -eq 440401920
+          curl -L --fail --retry 3 --retry-all-errors \
+            -o llama-b10809-bin-ubuntu-x64.tar.gz \
+            "https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-ubuntu-x64.tar.gz"
+          sha256sum qwen4b.part.0 llama-b10809-bin-ubuntu-x64.tar.gz > SHA256SUMS.txt
+      - name: Upload bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen4b-part-0
+          path: |
+            qwen4b.part.0
+            llama-b10809-bin-ubuntu-x64.tar.gz
+            SHA256SUMS.txt
+          retention-days: 1
+          compression-level: 0
