@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
-      PART: "0"
+      PART: "1"
       CHUNK_MIB: "300"
       MODEL_URL: "https://huggingface.co/bartowski/Qwen_Qwen3.5-2B-GGUF/resolve/main/Qwen_Qwen3.5-2B-Q4_K_M.gguf"
     steps:
