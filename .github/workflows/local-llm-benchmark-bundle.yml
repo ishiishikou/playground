@@ -46,12 +46,12 @@ jobs:
           mkdir -p bundle/bin bundle/model bundle/meta
           curl -L --fail --retry 5 --retry-delay 3 \
             -o bundle/model/Qwen3.5-4B-Q4_K_M.gguf \
-            "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true"
+            "https://huggingface.co/mradermacher/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B.Q4_K_M.gguf?download=true"
           cp vendor/llama.cpp/build/bin/llama-decision-bench bundle/bin/
           cp vendor/llama.cpp/build/bin/llama-bench bundle/bin/
           cp llama-cpp-revision.txt bundle/meta/
-          printf '%s\n' 'bartowski/Qwen_Qwen3.5-4B-GGUF' > bundle/meta/model-repository.txt
-          printf '%s\n' 'Qwen3.5-4B-Q4_K_M.gguf' > bundle/meta/model-file.txt
+          printf '%s\n' 'mradermacher/Qwen3.5-4B-GGUF' > bundle/meta/model-repository.txt
+          printf '%s\n' 'Qwen3.5-4B.Q4_K_M.gguf' > bundle/meta/model-file.txt
           sha256sum bundle/model/Qwen3.5-4B-Q4_K_M.gguf > bundle/meta/model-sha256.txt
           ldd bundle/bin/llama-decision-bench > bundle/meta/ldd.txt || true
           du -h bundle/model/Qwen3.5-4B-Q4_K_M.gguf bundle/bin/*
