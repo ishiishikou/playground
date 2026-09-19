@@ -28,29 +28,19 @@ jobs:
           run-id: 35445562908
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Split model into connector-sized chunks
+      - name: Split model into short-transfer chunks
         run: |
-          mkdir -p parts/runtime
-          cp -a source/bin parts/runtime/
-          cp -a source/meta parts/runtime/
-          split -b 500000000 -d -a 2 \
+          mkdir -p parts
+          split -b 150000000 -d -a 2 \
             source/model/Qwen3.5-4B-Q4_K_M.gguf \
             parts/model.part.
           ls -lh parts/model.part.*
-          test "$(find parts -maxdepth 1 -name 'model.part.*' | wc -l)" -eq 6
-
-      - name: Upload runtime
-        uses: actions/upload-artifact@v4
-        with:
-          name: local-llm-runtime
-          path: parts/runtime/
-          compression-level: 0
-          retention-days: 2
+          test "$(find parts -maxdepth 1 -name 'model.part.*' | wc -l)" -eq 19
 
       - name: Upload model part 00
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-model-part-00
+          name: local-llm-model-150m-part-00
           path: parts/model.part.00
           compression-level: 0
           retention-days: 2
@@ -58,7 +48,7 @@ jobs:
       - name: Upload model part 01
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-model-part-01
+          name: local-llm-model-150m-part-01
           path: parts/model.part.01
           compression-level: 0
           retention-days: 2
@@ -66,7 +56,7 @@ jobs:
       - name: Upload model part 02
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-model-part-02
+          name: local-llm-model-150m-part-02
           path: parts/model.part.02
           compression-level: 0
           retention-days: 2
@@ -74,7 +64,7 @@ jobs:
       - name: Upload model part 03
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-model-part-03
+          name: local-llm-model-150m-part-03
           path: parts/model.part.03
           compression-level: 0
           retention-days: 2
@@ -82,7 +72,7 @@ jobs:
       - name: Upload model part 04
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-model-part-04
+          name: local-llm-model-150m-part-04
           path: parts/model.part.04
           compression-level: 0
           retention-days: 2
@@ -90,7 +80,111 @@ jobs:
       - name: Upload model part 05
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-model-part-05
+          name: local-llm-model-150m-part-05
           path: parts/model.part.05
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-06
+          path: parts/model.part.06
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 07
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-07
+          path: parts/model.part.07
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 08
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-08
+          path: parts/model.part.08
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-09
+          path: parts/model.part.09
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 10
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-10
+          path: parts/model.part.10
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 11
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-11
+          path: parts/model.part.11
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 12
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-12
+          path: parts/model.part.12
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 13
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-13
+          path: parts/model.part.13
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 14
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-14
+          path: parts/model.part.14
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 15
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-15
+          path: parts/model.part.15
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 16
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-16
+          path: parts/model.part.16
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-17
+          path: parts/model.part.17
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 18
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-150m-part-18
+          path: parts/model.part.18
           compression-level: 0
           retention-days: 2
