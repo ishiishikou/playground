@@ -1,15 +1,19 @@
 #include "llama.h"
-#include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+using Clock = std::chrono::steady_clock;
 struct Q { std::string text; bool yes; };
+
+static double elapsed_ms(Clock::time_point t) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
+}
 
 static std::vector<llama_token> tok(const llama_vocab *v, const std::string &s, bool special) {
     int32_t n = llama_tokenize(v, s.c_str(), (int32_t) s.size(), nullptr, 0, special, true);
@@ -21,17 +25,16 @@ static std::vector<llama_token> tok(const llama_vocab *v, const std::string &s, 
     return x;
 }
 
-static std::string piece(const llama_vocab *v, llama_token t) {
-    char b[512];
-    int32_t n = llama_token_to_piece(v, t, b, sizeof(b), 0, true);
-    return n < 0 ? std::string("<err>") : std::string(b, (size_t) n);
+static std::vector<llama_token> cat(const std::vector<llama_token> &a, const std::vector<llama_token> &b) {
+    auto x = a;
+    x.insert(x.end(), b.begin(), b.end());
+    return x;
 }
 
-static std::string hex_bytes(const std::string &s) {
-    std::ostringstream os;
-    os << std::hex << std::setfill('0');
-    for (unsigned char c : s) os << std::setw(2) << (unsigned int) c;
-    return os.str();
+static std::string piece(const llama_vocab *v, llama_token t) {
+    char b[256];
+    int32_t n = llama_token_to_piece(v, t, b, sizeof(b), 0, true);
+    return n < 0 ? std::string("<err>") : std::string(b, (size_t) n);
 }
 
 static llama_token one(const llama_vocab *v, const std::vector<std::string> &candidates, std::string &selected) {
@@ -45,7 +48,7 @@ static llama_token one(const llama_vocab *v, const std::vector<std::string> &can
     throw std::runtime_error("no single-token label");
 }
 
-static llama_context * ctx_new(llama_model *m, int threads) {
+static llama_context *ctx_new(llama_model *m, int threads) {
     auto p = llama_context_default_params();
     p.n_ctx = 4096;
     p.n_batch = 2048;
@@ -67,34 +70,30 @@ static void eval(llama_context *c, std::vector<llama_token> &x) {
     if (rc) throw std::runtime_error("decode failed rc=" + std::to_string(rc));
 }
 
-static llama_token sample1(llama_context *c) {
-    auto *s = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(s, llama_sampler_init_greedy());
-    auto t = llama_sampler_sample(s, c, -1);
-    llama_sampler_free(s);
-    return t;
+static bool direct(llama_context *c, llama_token yes_tok, llama_token no_tok) {
+    float *l = llama_get_logits_ith(c, -1);
+    if (!l) throw std::runtime_error("missing logits");
+    return l[yes_tok] > l[no_tok];
 }
 
-static std::string join_ids(const std::vector<llama_token> &xs) {
-    std::ostringstream os;
-    for (size_t i = 0; i < xs.size(); ++i) {
-        if (i) os << ",";
-        os << xs[i];
-    }
-    return os.str();
+static llama_sampler *new_ab_sampler(const llama_vocab *v) {
+    auto *s = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    auto *g = llama_sampler_init_grammar(v, "root ::= \" A\" | \" B\"", "root");
+    if (!g) throw std::runtime_error("grammar init failed");
+    llama_sampler_chain_add(s, g);
+    llama_sampler_chain_add(s, llama_sampler_init_greedy());
+    return s;
 }
 
 int main(int argc, char **argv) {
     std::string path;
     int threads = 4;
-    int trace_tokens = 16;
     for (int i = 1; i < argc; ++i) {
         if ((!strcmp(argv[i], "-m") || !strcmp(argv[i], "--model")) && i + 1 < argc) path = argv[++i];
         else if (!strcmp(argv[i], "--threads") && i + 1 < argc) threads = atoi(argv[++i]);
-        else if (!strcmp(argv[i], "--trace-tokens") && i + 1 < argc) trace_tokens = atoi(argv[++i]);
     }
     if (path.empty()) {
-        std::cerr << "usage: llama-b-one-token-diag -m model.gguf [--threads 4] [--trace-tokens 16]\n";
+        std::cerr << "usage: llama-b-one-token-diag -m model.gguf [--threads 4]\n";
         return 2;
     }
 
@@ -105,9 +104,9 @@ int main(int argc, char **argv) {
     if (!model) return 3;
     auto *v = llama_model_get_vocab(model);
 
-    std::string yl, nl;
-    auto yt = one(v, {" A", "A", " 1", "1"}, yl);
-    auto ntok = one(v, {" B", "B", " 0", "0"}, nl);
+    std::string yes_label, no_label;
+    auto yes_tok = one(v, {" A", "A", " 1", "1"}, yes_label);
+    auto no_tok  = one(v, {" B", "B", " 0", "0"}, no_label);
 
     const std::string prefix =
         "You are a deterministic binary decision engine. Use only the facts and policy below. "
@@ -129,71 +128,99 @@ int main(int argc, char **argv) {
         {"Is this customer eligible for the Yokohama local event?", true},
     };
 
-    std::cout << "{\"type\":\"meta\",\"yes_token\":" << yt
-              << ",\"yes_piece_hex\":\"" << hex_bytes(piece(v, yt))
-              << "\",\"no_token\":" << ntok
-              << ",\"no_piece_hex\":\"" << hex_bytes(piece(v, ntok))
-              << "\",\"threads\":" << threads
-              << ",\"trace_tokens\":" << trace_tokens << "}\n";
+    auto pfx = tok(v, prefix, true);
+    std::vector<std::vector<llama_token>> full;
+    for (const auto &q : qs) {
+        auto suffix = tok(v, "Question: " + q.text + "\nAnswer:", false);
+        full.push_back(cat(pfx, suffix));
+    }
 
-    int exact_correct = 0;
-    int traced_semantic_correct = 0;
+    std::cout << "{\"type\":\"meta\",\"threads\":" << threads
+              << ",\"yes_token\":" << yes_tok
+              << ",\"yes_piece\":\"" << piece(v, yes_tok)
+              << "\",\"no_token\":" << no_tok
+              << ",\"no_piece\":\"" << piece(v, no_tok)
+              << "\",\"grammar\":\"A_or_B_single_token\"}\n" << std::flush;
 
-    for (size_t i = 0; i < qs.size(); ++i) {
+    // Warm-up exactly the same model/prompt evaluation path.
+    {
         auto *c = ctx_new(model, threads);
-        clear_ctx(c);
-        auto x = tok(v, prefix + "Question: " + qs[i].text + "\nAnswer:", true);
+        auto x = full[0];
         eval(c, x);
-
-        std::vector<llama_token> trace;
-        std::vector<std::string> pieces;
-        int first_ab_pos = -1;
-        bool first_ab_yes = false;
-
-        for (int j = 0; j < trace_tokens; ++j) {
-            llama_token z = sample1(c);
-            trace.push_back(z);
-            pieces.push_back(piece(v, z));
-
-            if (first_ab_pos < 0 && (z == yt || z == ntok)) {
-                first_ab_pos = j;
-                first_ab_yes = (z == yt);
-            }
-
-            if (llama_vocab_is_eog(v, z)) break;
-            std::vector<llama_token> one_tok{z};
-            eval(c, one_tok);
-        }
-
-        bool first_exact = !trace.empty() &&
-            ((trace[0] == yt && qs[i].yes) || (trace[0] == ntok && !qs[i].yes));
-        bool traced_correct = first_ab_pos >= 0 && first_ab_yes == qs[i].yes;
-        if (first_exact) exact_correct++;
-        if (traced_correct) traced_semantic_correct++;
-
-        std::ostringstream ph;
-        for (size_t j = 0; j < pieces.size(); ++j) {
-            if (j) ph << ",";
-            ph << hex_bytes(pieces[j]);
-        }
-
-        std::cout << "{\"type\":\"question\",\"index\":" << i
-                  << ",\"expected\":\"" << (qs[i].yes ? "A" : "B")
-                  << "\",\"first_token\":" << (trace.empty() ? -1 : trace[0])
-                  << ",\"first_piece_hex\":\"" << (trace.empty() ? "" : hex_bytes(pieces[0]))
-                  << "\",\"first_exact_correct\":" << (first_exact ? "true" : "false")
-                  << ",\"first_ab_pos\":" << first_ab_pos
-                  << ",\"first_ab_choice\":\"" << (first_ab_pos < 0 ? "NONE" : (first_ab_yes ? "A" : "B"))
-                  << "\",\"traced_semantic_correct\":" << (traced_correct ? "true" : "false")
-                  << ",\"trace_token_ids\":\"" << join_ids(trace)
-                  << "\",\"trace_piece_hex\":\"" << ph.str() << "\"}\n";
-
+        (void) direct(c, yes_tok, no_tok);
         llama_free(c);
     }
 
-    std::cout << "{\"type\":\"summary\",\"exact_first_token_correct\":" << exact_correct
-              << ",\"traced_first_ab_correct\":" << traced_semantic_correct
-              << ",\"questions\":" << qs.size() << "}\n";
+    // B-fixed: constrained one-token generation using llama.cpp sampler chain + GBNF grammar.
+    {
+        auto *c = ctx_new(model, threads);
+        auto *sampler = new_ab_sampler(v);
+        int correct = 0;
+        double first_ms = 0.0;
+        auto six_start = Clock::now();
+
+        for (size_t i = 0; i < qs.size(); ++i) {
+            clear_ctx(c);
+            llama_sampler_reset(sampler);
+            auto x = full[i];
+            auto t = Clock::now();
+            eval(c, x);
+            llama_token z = llama_sampler_sample(sampler, c, -1);
+            double one_ms = elapsed_ms(t);
+            if (i == 0) first_ms = one_ms;
+
+            bool predicted_yes = z == yes_tok;
+            bool recognized = z == yes_tok || z == no_tok;
+            bool ok = recognized && predicted_yes == qs[i].yes;
+            if (ok) correct++;
+
+            std::cout << "{\"type\":\"question\",\"mode\":\"B_constrained_one_token_generation\",\"index\":" << i
+                      << ",\"expected\":\"" << (qs[i].yes ? "A" : "B")
+                      << "\",\"token\":" << z
+                      << ",\"piece\":\"" << piece(v, z)
+                      << "\",\"correct\":" << (ok ? "true" : "false")
+                      << ",\"latency_ms\":" << std::fixed << std::setprecision(3) << one_ms << "}\n" << std::flush;
+        }
+
+        double six_ms = elapsed_ms(six_start);
+        std::cout << "{\"type\":\"summary\",\"mode\":\"B_constrained_one_token_generation\",\"correct_6\":" << correct
+                  << ",\"first_ms\":" << std::fixed << std::setprecision(3) << first_ms
+                  << ",\"six_ms\":" << six_ms << "}\n" << std::flush;
+        llama_sampler_free(sampler);
+        llama_free(c);
+    }
+
+    // C reference: direct comparison of the exact same A/B logits on the exact same prompts.
+    {
+        auto *c = ctx_new(model, threads);
+        int correct = 0;
+        double first_ms = 0.0;
+        auto six_start = Clock::now();
+
+        for (size_t i = 0; i < qs.size(); ++i) {
+            clear_ctx(c);
+            auto x = full[i];
+            auto t = Clock::now();
+            eval(c, x);
+            bool predicted_yes = direct(c, yes_tok, no_tok);
+            double one_ms = elapsed_ms(t);
+            if (i == 0) first_ms = one_ms;
+            bool ok = predicted_yes == qs[i].yes;
+            if (ok) correct++;
+
+            std::cout << "{\"type\":\"question\",\"mode\":\"C_direct_logits_no_cache\",\"index\":" << i
+                      << ",\"expected\":\"" << (qs[i].yes ? "A" : "B")
+                      << "\",\"choice\":\"" << (predicted_yes ? "A" : "B")
+                      << "\",\"correct\":" << (ok ? "true" : "false")
+                      << ",\"latency_ms\":" << std::fixed << std::setprecision(3) << one_ms << "}\n" << std::flush;
+        }
+
+        double six_ms = elapsed_ms(six_start);
+        std::cout << "{\"type\":\"summary\",\"mode\":\"C_direct_logits_no_cache\",\"correct_6\":" << correct
+                  << ",\"first_ms\":" << std::fixed << std::setprecision(3) << first_ms
+                  << ",\"six_ms\":" << six_ms << "}\n" << std::flush;
+        llama_free(c);
+    }
 
     llama_model_free(model);
     return 0;
