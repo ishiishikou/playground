@@ -1,0 +1,65 @@
+name: Prepare local LLM benchmark bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bench/decision-only-local-llm
+    paths:
+      - ".github/workflows/local-llm-benchmark-bundle.yml"
+      - "bench/local-llm/**"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone llama.cpp
+        run: |
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git -C vendor/llama.cpp rev-parse HEAD | tee llama-cpp-revision.txt
+
+      - name: Add custom benchmark target
+        run: |
+          mkdir -p vendor/llama.cpp/examples/decision-bench
+          cp bench/local-llm/decision_bench.cpp vendor/llama.cpp/examples/decision-bench/decision_bench.cpp
+          cp bench/local-llm/CMakeLists.txt vendor/llama.cpp/examples/decision-bench/CMakeLists.txt
+          printf '\nadd_subdirectory(decision-bench)\n' >> vendor/llama.cpp/examples/CMakeLists.txt
+
+      - name: Build portable CPU binaries
+        run: |
+          cmake -S vendor/llama.cpp -B vendor/llama.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=ON \
+            -DLLAMA_BUILD_TOOLS=ON
+          cmake --build vendor/llama.cpp/build --target llama-decision-bench llama-bench -j2
+
+      - name: Download Qwen3.5 4B Q4_K_M GGUF
+        run: |
+          mkdir -p bundle/bin bundle/model bundle/meta
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o bundle/model/Qwen3.5-4B-Q4_K_M.gguf \
+            "https://huggingface.co/bartowski/Qwen_Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true"
+          cp vendor/llama.cpp/build/bin/llama-decision-bench bundle/bin/
+          cp vendor/llama.cpp/build/bin/llama-bench bundle/bin/
+          cp llama-cpp-revision.txt bundle/meta/
+          printf '%s\n' 'bartowski/Qwen_Qwen3.5-4B-GGUF' > bundle/meta/model-repository.txt
+          printf '%s\n' 'Qwen3.5-4B-Q4_K_M.gguf' > bundle/meta/model-file.txt
+          sha256sum bundle/model/Qwen3.5-4B-Q4_K_M.gguf > bundle/meta/model-sha256.txt
+          ldd bundle/bin/llama-decision-bench > bundle/meta/ldd.txt || true
+          du -h bundle/model/Qwen3.5-4B-Q4_K_M.gguf bundle/bin/*
+
+      - name: Upload benchmark bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-decision-benchmark-bundle
+          path: bundle/
+          compression-level: 0
+          retention-days: 2
