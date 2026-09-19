@@ -41,9 +41,9 @@ jobs:
             -DLLAMA_BUILD_TOOLS=ON
           cmake --build vendor/llama.cpp/build --target llama-decision-bench llama-bench -j2
 
-      - name: Download Qwen3.5 4B Q4_K_M GGUF
+      - name: Download Qwen3.5 4B Q4_K_M GGUF and prepare chunks
         run: |
-          mkdir -p bundle/bin bundle/model bundle/meta
+          mkdir -p bundle/bin bundle/model bundle/meta model-chunks
           curl -L --fail --retry 5 --retry-delay 3 \
             -o bundle/model/Qwen3.5-4B-Q4_K_M.gguf \
             "https://huggingface.co/mradermacher/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B.Q4_K_M.gguf?download=true"
@@ -54,12 +54,72 @@ jobs:
           printf '%s\n' 'Qwen3.5-4B.Q4_K_M.gguf' > bundle/meta/model-file.txt
           sha256sum bundle/model/Qwen3.5-4B-Q4_K_M.gguf > bundle/meta/model-sha256.txt
           ldd bundle/bin/llama-decision-bench > bundle/meta/ldd.txt || true
-          du -h bundle/model/Qwen3.5-4B-Q4_K_M.gguf bundle/bin/*
+          split -b 400M -d -a 2 bundle/model/Qwen3.5-4B-Q4_K_M.gguf model-chunks/model.part.
+          ls -lh model-chunks bundle/bin bundle/meta
+          rm -f bundle/model/Qwen3.5-4B-Q4_K_M.gguf
 
-      - name: Upload benchmark bundle
+      - name: Upload binaries and metadata
         uses: actions/upload-artifact@v4
         with:
-          name: local-llm-decision-benchmark-bundle
-          path: bundle/
+          name: local-llm-bench-bin-meta
+          path: |
+            bundle/bin/
+            bundle/meta/
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-00
+          path: model-chunks/model.part.00
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-01
+          path: model-chunks/model.part.01
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-02
+          path: model-chunks/model.part.02
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-03
+          path: model-chunks/model.part.03
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-04
+          path: model-chunks/model.part.04
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-05
+          path: model-chunks/model.part.05
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model chunk 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-06
+          path: model-chunks/model.part.06
           compression-level: 0
           retention-days: 2
