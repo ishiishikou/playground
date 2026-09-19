@@ -24,9 +24,9 @@ jobs:
         with:
           name: local-llm-decision-benchmark-bundle
           path: source
-          repository: \${{ github.repository }}
+          repository: ${{ github.repository }}
           run-id: 35445562908
-          github-token: \${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Split model into connector-sized chunks
         run: |
