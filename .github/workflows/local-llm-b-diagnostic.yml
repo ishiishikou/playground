@@ -1,0 +1,69 @@
+name: Diagnose local LLM mode B one-token output
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bench/decision-only-local-llm
+    paths:
+      - ".github/workflows/local-llm-b-diagnostic.yml"
+      - "diagnostics/local-llm/b_one_token_diag.cpp"
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned llama.cpp revision
+        run: |
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git -C vendor/llama.cpp fetch --depth 1 origin e613ef2c81bae98d59850d061ac29e6e3e88cb00
+          git -C vendor/llama.cpp checkout e613ef2c81bae98d59850d061ac29e6e3e88cb00
+          git -C vendor/llama.cpp rev-parse HEAD | tee llama-cpp-revision.txt
+
+      - name: Add B-only diagnostic target
+        run: |
+          mkdir -p vendor/llama.cpp/examples/decision-bench
+          cp diagnostics/local-llm/b_one_token_diag.cpp vendor/llama.cpp/examples/decision-bench/decision_bench.cpp
+          cp bench/local-llm/CMakeLists.txt vendor/llama.cpp/examples/decision-bench/CMakeLists.txt
+          printf '\nadd_subdirectory(decision-bench)\n' >> vendor/llama.cpp/examples/CMakeLists.txt
+
+      - name: Build portable CPU diagnostic
+        run: |
+          cmake -S vendor/llama.cpp -B vendor/llama.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DLLAMA_CURL=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=ON \
+            -DLLAMA_BUILD_TOOLS=OFF
+          cmake --build vendor/llama.cpp/build --target llama-decision-bench -j2
+
+      - name: Download and verify pinned model
+        run: |
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o Qwen3.5-4B.Q4_K_M.gguf \
+            "https://huggingface.co/mradermacher/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B.Q4_K_M.gguf?download=true"
+          echo "51eafbc127f35598c8f1d2ec58b2520d6126c7d1195c4eca26832e63a2939d39  Qwen3.5-4B.Q4_K_M.gguf" | sha256sum -c -
+
+      - name: Run B-only six-question diagnostic
+        run: |
+          /usr/bin/time -v vendor/llama.cpp/build/bin/llama-decision-bench \
+            -m Qwen3.5-4B.Q4_K_M.gguf \
+            --threads 4 \
+            --trace-tokens 16 \
+            2> b-diagnostic-stderr.txt | tee b-diagnostic.jsonl
+
+      - name: Upload diagnostic result
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-b-one-token-diagnostic
+          path: |
+            b-diagnostic.jsonl
+            b-diagnostic-stderr.txt
+            llama-cpp-revision.txt
+          retention-days: 7
