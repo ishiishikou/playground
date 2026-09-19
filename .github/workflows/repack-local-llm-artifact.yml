@@ -1,0 +1,96 @@
+name: Repack local LLM benchmark artifact
+
+on:
+  push:
+    branches:
+      - bench/decision-only-local-llm
+    paths:
+      - ".github/workflows/repack-local-llm-artifact.yml"
+  workflow_dispatch:
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download successful benchmark bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: local-llm-decision-benchmark-bundle
+          path: source
+          repository: \${{ github.repository }}
+          run-id: 35445562908
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Split model into connector-sized chunks
+        run: |
+          mkdir -p parts/runtime
+          cp -a source/bin parts/runtime/
+          cp -a source/meta parts/runtime/
+          split -b 500000000 -d -a 2 \
+            source/model/Qwen3.5-4B-Q4_K_M.gguf \
+            parts/model.part.
+          ls -lh parts/model.part.*
+          test "$(find parts -maxdepth 1 -name 'model.part.*' | wc -l)" -eq 6
+
+      - name: Upload runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-runtime
+          path: parts/runtime/
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-part-00
+          path: parts/model.part.00
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-part-01
+          path: parts/model.part.01
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-part-02
+          path: parts/model.part.02
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-part-03
+          path: parts/model.part.03
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-part-04
+          path: parts/model.part.04
+          compression-level: 0
+          retention-days: 2
+
+      - name: Upload model part 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-model-part-05
+          path: parts/model.part.05
+          compression-level: 0
+          retention-days: 2
