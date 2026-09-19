@@ -1,0 +1,69 @@
+name: Run full local LLM decision benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bench/decision-only-local-llm
+    paths:
+      - ".github/workflows/local-llm-full-benchmark.yml"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record runner CPU
+        run: |
+          lscpu | tee runner-lscpu.txt
+          nproc | tee runner-nproc.txt
+
+      - name: Clone and build pinned-current llama.cpp runtime
+        run: |
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git vendor/llama.cpp
+          git -C vendor/llama.cpp rev-parse HEAD | tee llama-cpp-revision.txt
+          mkdir -p vendor/llama.cpp/examples/decision-bench
+          cp bench/local-llm/decision_bench.cpp vendor/llama.cpp/examples/decision-bench/decision_bench.cpp
+          cp bench/local-llm/CMakeLists.txt vendor/llama.cpp/examples/decision-bench/CMakeLists.txt
+          printf '\nadd_subdirectory(decision-bench)\n' >> vendor/llama.cpp/examples/CMakeLists.txt
+          cmake -S vendor/llama.cpp -B vendor/llama.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF \
+            -DBUILD_SHARED_LIBS=OFF -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_EXAMPLES=ON -DLLAMA_BUILD_TOOLS=OFF
+          cmake --build vendor/llama.cpp/build --target llama-decision-bench -j2
+
+      - name: Download and verify model identity
+        run: |
+          curl -L --fail --retry 5 --retry-delay 3 \
+            -o Qwen3.5-4B.Q4_K_M.gguf \
+            "https://huggingface.co/mradermacher/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B.Q4_K_M.gguf?download=true"
+          sha256sum Qwen3.5-4B.Q4_K_M.gguf | tee model-sha256.txt
+
+      - name: Run A-D benchmark on one runner
+        run: |
+          set +e
+          /usr/bin/time -v vendor/llama.cpp/build/bin/llama-decision-bench \
+            -m Qwen3.5-4B.Q4_K_M.gguf --threads 4 --normal-tokens 12 \
+            > benchmark.jsonl 2> benchmark.stderr
+          rc=$?
+          echo "$rc" | tee benchmark.exit
+          cat benchmark.jsonl
+          tail -100 benchmark.stderr
+          exit "$rc"
+
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-llm-full-benchmark-results
+          path: |
+            benchmark.jsonl
+            benchmark.stderr
+            benchmark.exit
+            runner-lscpu.txt
+            runner-nproc.txt
+            llama-cpp-revision.txt
+            model-sha256.txt
+          retention-days: 14
