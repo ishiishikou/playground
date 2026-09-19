@@ -9,6 +9,7 @@ on:
       - ".github/workflows/local-llm-benchmark-bundle.yml"
       - "bench/local-llm/**"
 
+# Benchmark source changes intentionally rebuild this portable runtime bundle.
 jobs:
   prepare:
     runs-on: ubuntu-latest
