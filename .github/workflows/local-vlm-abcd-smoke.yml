@@ -1,4 +1,4 @@
-name: VLM image A-B-C-D smoke benchmark
+name: VLM image A-B-C-D 100-decision benchmark
 
 on:
   workflow_dispatch:
@@ -6,27 +6,23 @@ on:
     branches:
       - bench/vlm-image-abcd
     paths:
-      - diagnostics/vlm-abcd/**
       - .github/workflows/local-vlm-abcd-smoke.yml
 
 jobs:
-  smoke:
+  benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240
 
     steps:
       - uses: actions/checkout@v4
-
       - name: System info
         run: |
           uname -a | tee system-info.txt
           lscpu | tee -a system-info.txt
           free -h | tee -a system-info.txt
-
       - name: Install image dependency
         run: python -m pip install --disable-pip-version-check pillow
-
-      - name: Generate deterministic validation images
+      - name: Generate identical deterministic validation images
         run: |
           mkdir -p images
           python - <<'PY'
@@ -45,8 +41,7 @@ jobs:
               im.save(f"images/{i}.png")
           PY
           sha256sum images/*.png | tee image-sha256.txt
-
-      - name: Build pinned llama.cpp and VLM benchmark
+      - name: Build pinned llama.cpp and validated harness with 100-decision extension
         run: |
           set -euo pipefail
           git clone --filter=blob:none https://github.com/ggml-org/llama.cpp.git
@@ -54,9 +49,26 @@ jobs:
           git checkout b23efaa2ef147f547ee75cbf0c621d61904de80e
           git rev-parse HEAD | tee ../llama-revision.txt
           cp ../diagnostics/vlm-abcd/vlm_abcd_bench.cpp tools/mtmd/vlm-abcd-bench.cpp
-          # mtmd::input_chunks owns a unique_ptr but has no move constructor at this pinned revision.
-          # Return a fresh wrapper around the released raw pointer so C++17 guaranteed copy elision applies.
-          sed -i 's/return chunks;/return mtmd::input_chunks(chunks.ptr.release());/g' tools/mtmd/vlm-abcd-bench.cpp
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tools/mtmd/vlm-abcd-bench.cpp')
+          s = p.read_text()
+          s = s.replace('return chunks;', 'return mtmd::input_chunks(chunks.ptr.release());')
+          s = s.replace('double six_ms = 0;\n    int correct6', 'double six_ms = 0;\n    double hundred_ms = 0;\n    int correct6')
+          s = s.replace('<< ",\\\"six_ms\\\":" << r.six_ms\n              << ",\\\"correct_6\\\":"', '<< ",\\\"six_ms\\\":" << r.six_ms\n              << ",\\\"hundred_ms\\\":" << r.hundred_ms\n              << ",\\\"decisions_per_sec_100\\\":" << (100000.0 / r.hundred_ms)\n              << ",\\\"correct_6\\\":"')
+          a_old = '''for (int i = 0; i < 6; ++i) {\n            (void) run(i);\n        }\n        r.six_ms = elapsed_ms(t);\n        emit(r);'''
+          a_new = '''for (int i = 0; i < 6; ++i) {\n            (void) run(i);\n        }\n        r.six_ms = elapsed_ms(t);\n        auto t100 = Clock::now();\n        for (int i = 0; i < 100; ++i) {\n            (void) run(i % 6);\n        }\n        r.hundred_ms = elapsed_ms(t100);\n        emit(r);'''
+          if s.count(a_old) != 1:
+              raise SystemExit(f'A insertion anchor count={s.count(a_old)}')
+          s = s.replace(a_old, a_new)
+          bcd_old = '''for (int i = 0; i < 6; ++i) {\n            (void) run(i, true);\n        }\n        r.six_ms = elapsed_ms(t);\n        emit(r);'''
+          bcd_new = '''for (int i = 0; i < 6; ++i) {\n            (void) run(i, true);\n        }\n        r.six_ms = elapsed_ms(t);\n        auto t100 = Clock::now();\n        for (int i = 0; i < 100; ++i) {\n            (void) run(i % 6, false);\n        }\n        r.hundred_ms = elapsed_ms(t100);\n        emit(r);'''
+          if s.count(bcd_old) != 3:
+              raise SystemExit(f'B/C/D insertion anchor count={s.count(bcd_old)}')
+          s = s.replace(bcd_old, bcd_new)
+          p.write_text(s)
+          PY
+          grep -n 'hundred_ms\|i < 100' tools/mtmd/vlm-abcd-bench.cpp | tee ../hundred-extension.txt
           cat >> tools/mtmd/CMakeLists.txt <<'CMAKE'
 
           add_executable(llama-vlm-abcd-bench vlm-abcd-bench.cpp)
@@ -65,40 +77,28 @@ jobs:
           CMAKE
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF
           cmake --build build -j 4 --target llama-vlm-abcd-bench
-
-      - name: Run six-decision image A-B-C-D smoke
+      - name: Run same-process A-B-C-D 100-decision benchmark
         run: |
           set -euo pipefail
           /usr/bin/time -v -o benchmark-time.txt \
             ./llama.cpp/build/bin/llama-vlm-abcd-bench \
-              -hf Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M \
-              -ngl 0 \
-              -t 4 \
-              -c 4096 \
-              -b 2048 \
-              -ub 512 \
-              --image-min-tokens 256 \
-              --image-max-tokens 256 \
-              --image images/0.png \
-              --image images/1.png \
-              --image images/2.png \
-              --image images/3.png \
-              --image images/4.png \
-              --image images/5.png \
+              -hf Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M -ngl 0 -t 4 -c 4096 -b 2048 -ub 512 \
+              --image-min-tokens 256 --image-max-tokens 256 \
+              --image images/0.png --image images/1.png --image images/2.png \
+              --image images/3.png --image images/4.png --image images/5.png \
             2>benchmark-stderr.log | tee benchmark.jsonl
-
       - name: Show evidence
         if: always()
         run: |
           cat benchmark.jsonl || true
           tail -200 benchmark-stderr.log || true
           cat benchmark-time.txt || true
-
+          cat hundred-extension.txt || true
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vlm-image-abcd-smoke
+          name: vlm-image-abcd-100
           path: |
             benchmark.jsonl
             benchmark-stderr.log
@@ -106,4 +106,5 @@ jobs:
             system-info.txt
             llama-revision.txt
             image-sha256.txt
+            hundred-extension.txt
           if-no-files-found: warn
