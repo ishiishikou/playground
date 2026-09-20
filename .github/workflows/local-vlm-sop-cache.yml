@@ -1,0 +1,110 @@
+name: VLM SOP changing-image prefix-cache benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - bench/vlm-sop-prefix-cache
+    paths:
+      - diagnostics/vlm-sop/**
+      - .github/workflows/local-vlm-sop-cache.yml
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System info
+        run: |
+          uname -a | tee system-info.txt
+          lscpu | tee -a system-info.txt
+          free -h | tee -a system-info.txt
+
+      - name: Install Python dependency
+        run: python -m pip install --disable-pip-version-check pillow
+
+      - name: Build pinned llama.cpp
+        run: |
+          git clone --filter=blob:none https://github.com/ggml-org/llama.cpp.git
+          cd llama.cpp
+          git checkout b23efaa2ef147f547ee75cbf0c621d61904de80e
+          git rev-parse HEAD | tee ../llama-revision.txt
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF
+          cmake --build build -j 4 --target llama-server
+
+      - name: Start Qwen3-VL server
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v -o server-time.txt \
+            ./llama.cpp/build/bin/llama-server \
+              -hf Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M \
+              -a vlm-sop \
+              --host 127.0.0.1 \
+              --port 8080 \
+              -np 1 \
+              -c 4096 \
+              -t 4 \
+              --image-min-tokens 256 \
+              --image-max-tokens 256 \
+              > server.log 2>&1 &
+          echo $! > server.pid
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:8080/health > health.json 2>/dev/null; then
+              cat health.json
+              exit 0
+            fi
+            if ! kill -0 "$(cat server.pid)" 2>/dev/null; then
+              echo "llama-server exited early"
+              tail -200 server.log
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for llama-server"
+          tail -200 server.log
+          exit 1
+
+      - name: Verify multimodal capability
+        run: |
+          curl -fsS http://127.0.0.1:8080/v1/models | tee models.json
+          python - <<'PY'
+          import json
+          x=json.load(open("models.json"))
+          print(json.dumps(x, indent=2))
+          PY
+
+      - name: Run changing-image benchmark
+        env:
+          LLAMA_URL: http://127.0.0.1:8080
+          RESULT_JSON: vlm_sop_cache_result.json
+        run: |
+          python diagnostics/vlm-sop/benchmark.py | tee benchmark.log
+
+      - name: Stop server and capture resource usage
+        if: always()
+        run: |
+          if [ -f server.pid ] && kill -0 "$(cat server.pid)" 2>/dev/null; then
+            kill "$(cat server.pid)" || true
+            wait "$(cat server.pid)" || true
+          fi
+          cat server-time.txt || true
+          tail -200 server.log || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vlm-sop-changing-image-prefix-cache
+          path: |
+            vlm_sop_cache_result.json
+            benchmark.log
+            server.log
+            server-time.txt
+            system-info.txt
+            llama-revision.txt
+            models.json
+            health.json
+          if-no-files-found: warn
