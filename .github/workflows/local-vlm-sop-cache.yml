@@ -38,6 +38,7 @@ jobs:
       - name: Start Qwen3-VL server
         run: |
           set -euo pipefail
+          mkdir -p /tmp/llama-slots
           /usr/bin/time -v -o server-time.txt \
             ./llama.cpp/build/bin/llama-server \
               -hf Qwen/Qwen3-VL-4B-Instruct-GGUF:Q4_K_M \
@@ -48,6 +49,7 @@ jobs:
               -c 4096 \
               -t 4 \
               --slots \
+              --slot-save-path /tmp/llama-slots \
               --image-min-tokens 256 \
               --image-max-tokens 256 \
               > server.log 2>&1 &
