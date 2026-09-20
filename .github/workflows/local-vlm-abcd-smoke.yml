@@ -54,6 +54,9 @@ jobs:
           git checkout b23efaa2ef147f547ee75cbf0c621d61904de80e
           git rev-parse HEAD | tee ../llama-revision.txt
           cp ../diagnostics/vlm-abcd/vlm_abcd_bench.cpp tools/mtmd/vlm-abcd-bench.cpp
+          # mtmd::input_chunks owns a unique_ptr but has no move constructor at this pinned revision.
+          # Return a fresh wrapper around the released raw pointer so C++17 guaranteed copy elision applies.
+          sed -i 's/return chunks;/return mtmd::input_chunks(chunks.ptr.release());/g' tools/mtmd/vlm-abcd-bench.cpp
           cat >> tools/mtmd/CMakeLists.txt <<'CMAKE'
 
           add_executable(llama-vlm-abcd-bench vlm-abcd-bench.cpp)
